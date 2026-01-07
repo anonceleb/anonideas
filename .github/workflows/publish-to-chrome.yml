@@ -1,0 +1,81 @@
+name: Publish to Chrome Web Store
+
+on:
+  workflow_dispatch:
+  release:
+    types: [created]
+
+jobs:
+  package:
+    name: Package Extension
+    runs-on: ubuntu-latest
+    outputs:
+      package-path: ${{ steps.package.outputs.zip-path }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 18
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test --silent
+
+      - name: Package extension
+        id: package
+        run: |
+          mkdir -p dist
+          ZIP="dist/wordle-extension-${{ github.sha }}.zip"
+          ./scripts/package_extension.sh
+          echo "zip-path=$ZIP" >> $GITHUB_OUTPUT
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: extension-zip
+          path: dist/*.zip
+
+  publish:
+    name: Upload & Publish to Chrome Web Store
+    needs: package
+    runs-on: ubuntu-latest
+    if: ${{ secrets.WEBSTORE_CLIENT_ID && secrets.WEBSTORE_CLIENT_SECRET && secrets.WEBSTORE_REFRESH_TOKEN && secrets.EXTENSION_ID }}
+    steps:
+      - name: Download package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: extension-zip
+          path: ./dist
+
+      - name: Show files
+        run: ls -la dist
+
+      - name: Upload to Chrome Web Store
+        id: upload
+        uses: r0adkll/upload-chrome-extension@v1
+        with:
+          extension_id: ${{ secrets.EXTENSION_ID }}
+          client_id: ${{ secrets.WEBSTORE_CLIENT_ID }}
+          client_secret: ${{ secrets.WEBSTORE_CLIENT_SECRET }}
+          refresh_token: ${{ secrets.WEBSTORE_REFRESH_TOKEN }}
+          zip: ./dist/*.zip
+          publish: true
+
+      - name: Upload result to workflow summary
+        run: |
+          echo "Upload result: ${{ steps.upload.outputs.upload_response }}"
+
+  skip-publish-warning:
+    name: Skip publishing (missing secrets)
+    runs-on: ubuntu-latest
+    if: ${{ !secrets.WEBSTORE_CLIENT_ID || !secrets.WEBSTORE_CLIENT_SECRET || !secrets.WEBSTORE_REFRESH_TOKEN || !secrets.EXTENSION_ID }}
+    steps:
+      - name: Secrets not configured
+        run: |
+          echo "Publishing is skipped because one or more required secrets are missing."
+          echo "Set WEBSTORE_CLIENT_ID, WEBSTORE_CLIENT_SECRET, WEBSTORE_REFRESH_TOKEN, and EXTENSION_ID in repository secrets to enable publishing."
