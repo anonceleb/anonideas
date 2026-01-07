@@ -18,7 +18,14 @@ Option A — OAuth 2 Playground (recommended for simplicity):
 - In Step 2, click "Exchange authorization code for tokens" — you will receive an access token and a refresh token.
 - Copy the refresh token securely.
 
-Option B — Implement a short script to obtain a refresh token (if you prefer).
+Option B — Use the included script `scripts/get_refresh_token.js` to obtain a refresh token (preferred for reproducibility).
+
+    # Example usage (from project root):
+    node scripts/get_refresh_token.js --client_id=<CLIENT_ID> --client_secret=<CLIENT_SECRET> --port=8080
+
+Make sure you add a redirect URI of `http://localhost:8080/` (or your chosen port) to the OAuth client in Google Cloud Console before running the script.
+
+Note: The script prints the `refresh_token` to the terminal and attempts to copy it to clipboard on macOS; copy it into your GitHub repository secrets as `WEBSTORE_REFRESH_TOKEN`.
 
 3) Get your extension ID
 - Upload your first ZIP to the Chrome Web Store Developer Dashboard or check an existing extension to find the EXTENSION ID for the listing.
