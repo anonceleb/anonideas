@@ -287,13 +287,8 @@
       <div id="wordle-solver-content">
         <div class="manual-input-section">
           <div class="manual-input-header">Enter your guess and mark results:</div>
-          <div class="word-input-container">
-            <input type="text" id="word-input" maxlength="5" placeholder="Enter up to 5 letters (leave blank for unknowns)" autocomplete="off">
-          </div>
           <div id="wordle-solver-tiles" class="manual-tiles-container"></div>
-          <div class="manual-input-help">
-            Click letters: <span class="color-gray">Gray</span> → <span class="color-yellow">Yellow</span> → <span class="color-green">Green</span>
-          </div>
+          <div class="manual-input-help">Single-click a tile or its letter to edit; double-click a tile (or press <strong>Space</strong> while focused) to cycle color: <span class="color-gray">Gray</span> → <span class="color-yellow">Yellow</span> → <span class="color-green">Green</span>. Type directly into a tile to set a letter.</div>
           <div style="display:flex;gap:8px;">
             <button id="wordle-solver-get-suggestions" class="get-suggestions-btn">Get Suggestions</button>
             <button id="wordle-solver-clear" class="get-suggestions-btn">Clear</button>
@@ -322,26 +317,21 @@
       const getSuggestionsBtn = document.getElementById('wordle-solver-get-suggestions');
       const toggleBtn = document.getElementById('wordle-solver-toggle');
       
-      if (wordInput) {
-        wordInput.addEventListener('input', (e) => {
-          const word = e.target.value.toLowerCase().replace(/[^a-z]/g, '').slice(0, 5);
-          e.target.value = word;
-          createTiles(word);
-        });
-        // ensure tiles are present when focusing even if input is empty
-        wordInput.addEventListener('focus', (e) => {
-          const word = e.target.value.toLowerCase().replace(/[^a-z]/g, '').slice(0, 5);
-          createTiles(word);
-        });
-      }
+
       
       if (getSuggestionsBtn) getSuggestionsBtn.addEventListener('click', getSuggestions);
       const clearBtn = document.getElementById('wordle-solver-clear');
       if (clearBtn) clearBtn.addEventListener('click', () => {
-        const wordInput = document.getElementById('word-input');
-        if (wordInput) wordInput.value = '';
-        const tiles = document.getElementById('wordle-solver-tiles');
-        if (tiles) tiles.innerHTML = '';
+        const tiles = document.querySelectorAll('#wordle-solver-tiles .manual-tile');
+        tiles.forEach(tile => {
+          const input = tile.querySelector('input.tile-letter-input');
+          if (input) input.value = '';
+          tile.dataset.letter = '';
+          tile.dataset.state = 'absent';
+          tile.className = 'manual-tile manual-tile-gray';
+          const toggle = tile.querySelector('.tile-state-toggle');
+          if (toggle) toggle.style.background = '#787c7e';
+        });
         const results = document.getElementById('wordle-solver-results');
         if (results) { results.style.display = 'none'; results.innerHTML = ''; }
         const inputSection = document.querySelector('.manual-input-section');
@@ -422,7 +412,15 @@
 
     // Initialize blank editable tiles so users can immediately type or toggle colors
     createTiles('');
+
+    // Show a first-use tooltip once
+    showFirstUseTooltip();
   };
+
+  // Tile state constants shared by tiles
+  const TILE_STATES = ['absent', 'present', 'correct'];
+  const TILE_CLASSES = ['manual-tile-gray', 'manual-tile-yellow', 'manual-tile-green'];
+  const TILE_COLORS = { absent: '#787c7e', present: '#c9b458', correct: '#6aaa64' };
 
   // Create tiles for word (editable single-letter fields). Passing empty string creates 5 blank tiles.
   const createTiles = (word = '') => {
@@ -437,6 +435,21 @@
       tile.className = 'manual-tile manual-tile-gray';
       tile.dataset.letter = letter;
       tile.dataset.state = 'absent';
+
+      // small toggle button to change the tile state (useful when input consumes clicks)
+      const toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.className = 'tile-state-toggle';
+      toggle.title = 'Cycle tile state: Gray → Yellow → Green';
+      toggle.setAttribute('aria-label', 'Cycle tile state');
+
+      // helper to set tile state and update visuals
+      const setTileState = (st) => {
+        tile.dataset.state = st;
+        const idx = TILE_STATES.indexOf(st);
+        tile.className = 'manual-tile ' + TILE_CLASSES[idx];
+        toggle.style.background = TILE_COLORS[st];
+      };
 
       // input for the letter (single character)
       const input = document.createElement('input');
@@ -456,23 +469,77 @@
         if (e.key === 'Backspace' || e.key === 'Delete') {
           setTimeout(() => { tile.dataset.letter = (input.value || '').toLowerCase(); }, 0);
         }
+        // allow spacebar to cycle the tile state when focused on the input
+        if (e.key === ' ' || e.key === 'Spacebar') {
+          e.preventDefault();
+          const currentIdx = TILE_STATES.indexOf(tile.dataset.state);
+          const nextIdx = (currentIdx + 1) % 3;
+          setTileState(TILE_STATES[nextIdx]);
+          // keep focus on input
+          input.focus();
+        }
       });
 
-      // cycle color when clicking tile but not when focusing or typing in the input
-      tile.addEventListener('click', (ev) => {
-        if (ev.target === input) return; // don't cycle when user is editing the letter
-        const states = ['absent', 'present', 'correct'];
-        const classes = ['manual-tile-gray', 'manual-tile-yellow', 'manual-tile-green'];
-        const currentIdx = states.indexOf(tile.dataset.state);
+      // attach toggle click behavior
+      toggle.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        const currentIdx = TILE_STATES.indexOf(tile.dataset.state);
         const nextIdx = (currentIdx + 1) % 3;
-        tile.dataset.state = states[nextIdx];
-        tile.className = 'manual-tile ' + classes[nextIdx];
+        setTileState(TILE_STATES[nextIdx]);
       });
+
+      // Single-click focuses the input for editing; double-click cycles the color
+      tile.addEventListener('click', (ev) => {
+        if (ev.target === toggle) return; // ignore the small toggle
+        // focus the input so user can type immediately
+        input.focus();
+      });
+
+      tile.addEventListener('dblclick', (ev) => {
+        if (ev.target === toggle) return;
+        const currentIdx = TILE_STATES.indexOf(tile.dataset.state);
+        const nextIdx = (currentIdx + 1) % 3;
+        setTileState(TILE_STATES[nextIdx]);
+      });
+
+      // initialize toggle color and accessibility attributes
+      setTileState(tile.dataset.state);
+      input.setAttribute('aria-label', `Tile ${i + 1} letter`);
+      tile.setAttribute('title', 'Single-click to edit; double-click to change color');
+      tile.setAttribute('role', 'group');
 
       tile.appendChild(input);
+      tile.appendChild(toggle);
       tilesContainer.appendChild(tile);
     }
   }; 
+
+  // First-use tooltip helper
+  const showFirstUseTooltip = () => {
+    try {
+      if (localStorage.getItem('ws-tooltip-shown')) return;
+    } catch (e) {
+      // ignore storage errors
+      return;
+    }
+    const container = document.getElementById('wordle-solver-container');
+    if (!container) return;
+    const tooltip = document.createElement('div');
+    tooltip.className = 'first-use-tooltip';
+    tooltip.innerHTML = `<div class="tooltip-content">Tip: <strong>Single-click</strong> a tile to edit; <strong>double-click</strong> or press <strong>Space</strong> to change color. <button class="tooltip-dismiss">Got it</button></div>`;
+    container.appendChild(tooltip);
+    const dismiss = tooltip.querySelector('.tooltip-dismiss');
+    dismiss.addEventListener('click', () => {
+      try { localStorage.setItem('ws-tooltip-shown', '1'); } catch (e) {}
+      if (tooltip.parentNode) tooltip.parentNode.removeChild(tooltip);
+    });
+    setTimeout(() => { tooltip.classList.add('visible'); }, 20);
+    // auto-dismiss after 10s
+    setTimeout(() => {
+      try { localStorage.setItem('ws-tooltip-shown', '1'); } catch (e) {}
+      if (tooltip.parentNode) tooltip.parentNode.removeChild(tooltip);
+    }, 10000);
+  };
 
   // Get suggestions from API
   const getSuggestions = async () => {

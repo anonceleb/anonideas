@@ -213,6 +213,10 @@
 }
 
 /* Editable single-letter input inside a tile */
+.manual-tile {
+  position: relative;
+}
+
 .manual-tile input.tile-letter-input {
   width: 100%;
   height: 100%;
@@ -230,6 +234,43 @@
 .manual-tile input.tile-letter-input:focus {
   outline: none;
 }
+
+/* Small toggle in the corner of the tile to change state (useful when input consumes clicks) */
+.tile-state-toggle {
+  position: absolute;
+  right: 6px;
+  top: 6px;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1px solid rgba(0,0,0,0.12);
+  padding: 0;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.tile-state-toggle:focus {
+  outline: 2px solid rgba(0,0,0,0.12);
+}
+
+/* First-use tooltip */
+.first-use-tooltip {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  background: rgba(18,18,19,0.95);
+  color: #fff;
+  padding: 10px 12px;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity .18s ease, transform .18s ease;
+  z-index: 10001;
+}
+.first-use-tooltip.visible { opacity: 1; transform: translateY(0); }
+.first-use-tooltip .tooltip-content { display:flex; gap:8px; align-items:center; font-size:13px; }
+.first-use-tooltip .tooltip-dismiss { background: #fff; color: #121213; border: none; padding: 6px 8px; border-radius: 6px; cursor: pointer; }
 
 .manual-tile-gray {
   background: #787c7e;
