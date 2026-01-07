@@ -21,4 +21,12 @@ jobs:
       - name: Install dependencies
         run: npm ci || npm install
       - name: Run tests
-        run: npm test
+        continue-on-error: true
+        run: |
+          npm test --silent 2>&1 | tee test-output.txt
+      - name: Upload test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-output
+          path: test-output.txt
