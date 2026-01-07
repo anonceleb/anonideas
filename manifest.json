@@ -9,9 +9,10 @@
   "optional_host_permissions": [
     "https://www.nytimes.com/*",
     "https://www.nytimes.com/games/wordle/*",
-    "https://wordle.*/*",
+    "https://wordle.com/*",
+    "https://www.wordle.com/*",
     "https://*.wordle.com/*",
-    "https://*.wordlegame.*/*",
+    "https://*.absurdle.com/*",
     "https://*.wordle.wtf/*",
     "https://*.wordleplay.com/*"
   ],
@@ -20,7 +21,8 @@
       "matches": [
         "https://www.nytimes.com/games/wordle/*",
         "https://www.nytimes.com/*/wordle*",
-        "https://wordle.*/*",
+        "https://wordle.com/*",
+        "https://www.wordle.com/*",
         "https://*.wordle.com/*",
         "https://*.absurdle.com/*",
         "https://*.wordle.wtf/*",
