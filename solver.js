@@ -175,10 +175,11 @@
 
     if (!hasConstraints) {
       console.log('Wordle Solver: No constraints, suggesting THRUM');
-      return [{
+      return { suggestions: [{
         word: 'thrum',
+        entropy: 0,
         explanation: 'Good starting word with common letters (T, H, R, U, M).'
-      }];
+      }], total: wordList.length };
     }
 
     // Get possible words
@@ -191,13 +192,67 @@
     // prefer returning actual possibleWords so the user gets relevant actionable suggestions.
     if (numKnownCorrect >= 4 || possibleWords.length <= 10) {
       console.log('Wordle Solver: Constraints tight or few possibilities; returning possible words');
-      const scoredPossible = possibleWords.map(w => ({ word: w, entropy: calculateExpectedInfo(w, possibleWords) }));
-      scoredPossible.sort((a, b) => b.entropy - a.entropy);
-      return scoredPossible.slice(0, 5).map(item => ({
+
+      // When candidate set is small or many correct letters are known, compute
+      // tie-breaker scores (frequency and positional) so we don't fall back to
+      // lexicographic ordering on ties.
+      const computeLetterFreqMap = (list) => {
+        const m = Object.create(null);
+        list.forEach(w => {
+          for (const ch of w) m[ch] = (m[ch] || 0) + 1;
+        });
+        return m;
+      };
+      const letterFreqMapLocal = computeLetterFreqMap(wordList);
+      const scoreByLetterFreqLocal = (w) => {
+        let s = 0;
+        for (const ch of w) s += (letterFreqMapLocal[ch] || 0);
+        return s;
+      };
+
+      const computePositionalFreq = (list) => {
+        const arr = Array.from({ length: 5 }, () => Object.create(null));
+        list.forEach(w => {
+          for (let i = 0; i < 5; i++) {
+            const ch = w[i];
+            arr[i][ch] = (arr[i][ch] || 0) + 1;
+          }
+        });
+        return arr;
+      };
+      const posFreqArrLocal = computePositionalFreq(possibleWords);
+
+      const scoredPossible = possibleWords.map(w => {
+        // compute positional score (only count unknown positions)
+        let posScore = 0;
+        for (let i = 0; i < 5; i++) {
+          const isKnown = gameState && gameState.constraints && Object.prototype.hasOwnProperty.call(gameState.constraints.correct, i);
+          if (!isKnown) posScore += (posFreqArrLocal[i][w[i]] || 0);
+        }
+        return {
+          word: w,
+          entropy: calculateExpectedInfo(w, possibleWords),
+          freqScore: scoreByLetterFreqLocal(w),
+          posScore
+        };
+      });
+
+      // sort by entropy desc, then freqScore, then positional score, then lexicographic
+      scoredPossible.sort((a, b) => {
+        const d = b.entropy - a.entropy;
+        if (Math.abs(d) > 1e-9) return d;
+        const f = b.freqScore - a.freqScore;
+        if (f !== 0) return f;
+        const p = b.posScore - a.posScore;
+        if (p !== 0) return p;
+        return a.word.localeCompare(b.word);
+      });
+
+      return { suggestions: scoredPossible.slice(0, 5).map(item => ({
         word: item.word,
         entropy: item.entropy,
-        explanation: `Entropy: ${item.entropy.toFixed(2)} bits — expected reduction ≈ ${Math.max(1, Math.round(Math.pow(2, item.entropy)))}×. One of ${possibleWords.length} remaining possibilities.`
-      }));
+        explanation: `Entropy: ${item.entropy.toFixed(2)} bits — narrows to ${possibleWords.length} remaining possibilities.`
+      })), total: possibleWords.length };
     }
 
     // Fetch from API
@@ -272,23 +327,107 @@
 
     // Calculate entropy for each candidate
     console.log('Wordle Solver: Calculating entropy for candidates...');
+
+    // Precompute letter-frequency map (used for tie-breaking)
+    const computeLetterFreqMap = (list) => {
+      const m = Object.create(null);
+      list.forEach(w => {
+        for (const ch of w) m[ch] = (m[ch] || 0) + 1;
+      });
+      return m;
+    };
+
+    const letterFreqMap = computeLetterFreqMap(wordList);
+    const scoreByLetterFreq = (w) => {
+      let s = 0;
+      for (const ch of w) s += (letterFreqMap[ch] || 0);
+      return s;
+    };
+
+    // Compute positional letter frequency map derived from the remaining possible words
+    // This helps prefer candidates whose letters are more common in each unknown position
+    const computePositionalFreq = (list) => {
+      const arr = Array.from({ length: 5 }, () => Object.create(null));
+      list.forEach(w => {
+        for (let i = 0; i < 5; i++) {
+          const ch = w[i];
+          arr[i][ch] = (arr[i][ch] || 0) + 1;
+        }
+      });
+      return arr;
+    };
+
+    const posFreqArr = computePositionalFreq(possibleWords);
+
+    // Attempt to load optional bundled word frequency JSON (word -> numeric score)
+    let wordFreqMap = null;
+    try {
+      const idFreq = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
+      const freqText = await new Promise((resolve, reject) => {
+        const to = setTimeout(() => reject(new Error('Timeout loading word freq')), 3000);
+        const onMessage = (ev) => {
+          const d = ev.data || {};
+          if (d && d.source === 'wordle-solver-extension' && d.type === 'fetch-wordfreq-response' && d.id === idFreq) {
+            clearTimeout(to);
+            window.removeEventListener('message', onMessage);
+            if (d.ok) resolve(d.text); else reject(new Error(d.error || 'no data'));
+          }
+        };
+        window.addEventListener('message', onMessage);
+        try {
+          window.postMessage({ source: 'wordle-solver-extension', type: 'fetch-wordfreq', id: idFreq }, '*');
+        } catch (e) {
+          window.removeEventListener('message', onMessage);
+          reject(e);
+        }
+      });
+      try {
+        const parsed = JSON.parse(freqText || '{}');
+        if (parsed && typeof parsed === 'object') wordFreqMap = parsed;
+      } catch (e) {
+        // ignore parse errors
+      }
+    } catch (e) {
+      // no freq data available; that's fine
+    }
+
     const scored = poolForScoring.map((word, idx) => {
       if (idx % 20 === 0) console.log('Wordle Solver: Progress:', Math.round((idx / poolForScoring.length) * 100) + '%');
+
+      // compute positional score across unknown positions (favor letters common among remaining possibilities)
+      let posScore = 0;
+      for (let i = 0; i < 5; i++) {
+        if (!(gameState.constraints && gameState.constraints.correct && Object.prototype.hasOwnProperty.call(gameState.constraints.correct, i))) {
+          posScore += (posFreqArr[i][word[i]] || 0);
+        }
+      }
+
       return {
         word,
-        entropy: calculateExpectedInfo(word, possibleWords)
+        entropy: calculateExpectedInfo(word, possibleWords),
+        freqScore: (wordFreqMap && typeof wordFreqMap[word] === 'number') ? wordFreqMap[word] : scoreByLetterFreq(word),
+        posScore
       };
     });
 
-    // Sort by entropy and return top 3 (include numeric entropy in payload)
-    scored.sort((a, b) => b.entropy - a.entropy);
-    console.log('Wordle Solver: Top suggestions:', scored.slice(0, 3).map(s => s.word + ' (' + s.entropy.toFixed(2) + ' bits)'));
+    // Sort by entropy desc, then by freqScore desc (tie-breaker), then by positional frequency desc, then lexicographically
+    scored.sort((a, b) => {
+      const d = b.entropy - a.entropy;
+      if (Math.abs(d) > 1e-9) return d;
+      const f = b.freqScore - a.freqScore;
+      if (f !== 0) return f;
+      const p = b.posScore - a.posScore;
+      if (p !== 0) return p;
+      return a.word.localeCompare(b.word);
+    });
 
-    return scored.slice(0, 5).map((item, i) => ({
+    console.log('Wordle Solver: Top suggestions:', scored.slice(0, 5).map(s => s.word + ' (' + s.entropy.toFixed(2) + ' bits, fq=' + s.freqScore + ')'));
+
+    return { suggestions: scored.slice(0, 5).map((item, i) => ({
       word: item.word,
       entropy: item.entropy,
-      explanation: `Entropy: ${item.entropy.toFixed(2)} bits — expected reduction ≈ ${Math.max(1, Math.round(Math.pow(2, item.entropy)))}×. Narrows ${possibleWords.length} remaining possibilities.`
-    }));
+      explanation: `Entropy: ${item.entropy.toFixed(2)} bits — narrows ${possibleWords.length} remaining possibilities.`
+    })), total: possibleWords.length };
   };
 
   // Expose solver to window and set up message protocol

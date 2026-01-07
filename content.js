@@ -20,6 +20,17 @@
         const scriptUrl = chrome.runtime.getURL(file);
         console.log('Wordle Solver: Injecting', file, 'into', label, 'from:', scriptUrl);
         const script = doc.createElement('script');
+        // If the page uses a CSP nonce on existing scripts, mirror it to avoid inline/script-src violations where possible
+        try {
+          const existingScriptWithNonce = doc.querySelector('script[nonce]');
+          const nonceVal = existingScriptWithNonce && existingScriptWithNonce.getAttribute && existingScriptWithNonce.getAttribute('nonce');
+          if (nonceVal) {
+            script.setAttribute('nonce', nonceVal);
+          }
+        } catch (e) {
+          // ignore any access errors
+        }
+
         script.src = scriptUrl;
         script.onload = function() {
           console.log('Wordle Solver:', file, 'loaded in', label);
@@ -179,6 +190,27 @@
         });
       } catch (e) {
         window.postMessage({ source: 'wordle-solver-extension', type: 'fetch-wordlist-response', id, ok: false, error: e.message }, '*');
+      }
+    }
+
+    // handle requests to fetch an optional bundled word-frequency JSON
+    if (data && data.type === 'fetch-wordfreq' && data.id) {
+      const id = data.id;
+      try {
+        const url = chrome.runtime.getURL('data/word_freq.json');
+        chrome.runtime.sendMessage({ type: 'fetch-url', url }, (resp) => {
+          try {
+            if (resp && resp.ok) {
+              window.postMessage({ source: 'wordle-solver-extension', type: 'fetch-wordfreq-response', id, ok: true, text: resp.text }, '*');
+            } else {
+              window.postMessage({ source: 'wordle-solver-extension', type: 'fetch-wordfreq-response', id, ok: false, error: resp && resp.error ? resp.error : resp && resp.statusText }, '*');
+            }
+          } catch (e) {
+            window.postMessage({ source: 'wordle-solver-extension', type: 'fetch-wordfreq-response', id, ok: false, error: e.message }, '*');
+          }
+        });
+      } catch (e) {
+        window.postMessage({ source: 'wordle-solver-extension', type: 'fetch-wordfreq-response', id, ok: false, error: e.message }, '*');
       }
     }
   });
@@ -480,11 +512,13 @@
         });
       }
 
-      const suggestions = await promise;
+      const resp = await promise;
       currentRequestId = null;
-      if (!Array.isArray(suggestions)) throw new Error('Invalid suggestions response');
-      console.log('Wordle Solver: Received', suggestions.length, 'suggestions via protocol');
-      displaySuggestions(suggestions);
+      const suggestionsArr = Array.isArray(resp) ? resp : (resp && Array.isArray(resp.suggestions) ? resp.suggestions : null);
+      const total = resp && typeof resp.total === 'number' ? resp.total : (suggestionsArr ? suggestionsArr.length : 0);
+      if (!Array.isArray(suggestionsArr)) throw new Error('Invalid suggestions response');
+      console.log('Wordle Solver: Received', suggestionsArr.length, 'suggestions via protocol (total possible:', total, ')');
+      displaySuggestions(resp);
       return;
     } catch (err) {
       if (err && err.message && err.message.includes('Cancelled by user')) {
@@ -540,9 +574,13 @@
   };
 
   // Display suggestions
-  const displaySuggestions = (suggestions) => {
+  const displaySuggestions = (payload) => {
     const content = document.getElementById('wordle-solver-content');
     if (!content) return;
+
+    // payload may be either an array (legacy) or an object { suggestions: [...], total: N }
+    const suggestions = Array.isArray(payload) ? payload : (payload && Array.isArray(payload.suggestions) ? payload.suggestions : []);
+    const total = payload && typeof payload.total === 'number' ? payload.total : suggestions.length;
 
     if (suggestions.length === 0) {
       const resultsDiv = document.getElementById('wordle-solver-results');
@@ -564,14 +602,13 @@
       return;
     }
 
-    let html = '<div class="wordle-solver-suggestions">';
+    let html = `<div class="wordle-solver-summary">Possible matches: <strong>${total}</strong></div><div class="wordle-solver-suggestions">`;
     suggestions.forEach((s, i) => {
       const entropyText = (typeof s.entropy === 'number') ? (s.entropy.toFixed(2) + ' bits') : '';
       html += `
         <div class="wordle-solver-suggestion">
           <div class="suggestion-rank">#${i + 1}</div>
           <div style="display:flex;align-items:center;gap:12px;"><div class="suggestion-word">${s.word.toUpperCase()}</div><div class="suggestion-entropy" style="color:#666;font-size:12px;">${entropyText}</div></div>
-          <div class="suggestion-explanation">${s.explanation || ''}</div>
         </div>
       `;
     });

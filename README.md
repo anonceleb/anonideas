@@ -65,7 +65,7 @@ A Chrome Extension that analyzes your Wordle game and suggests the next 3 optima
 - **Word List Source**: [Valid Wordle Words](https://gist.githubusercontent.com/dracos/dd0668f281e685bad51479e5acaadb93/raw/valid-wordle-words.txt)
 - **Algorithm**: Entropy-based information theory (similar to the approach used by optimal Wordle solvers)
 - **Injection & Communication**: Uses a frame-targeted injection strategy and a `postMessage`-based protocol so the content script can reliably request suggestions from the injected page script even if the game runs inside an iframe.
-- **Bundled wordlist**: The extension ships a bundled `data/wordlist.txt` and uses it by default. This avoids CORS/scraping and is preferred for reliability, privacy, and store review friendliness.
+- **Bundled wordlist & optional word frequencies**: The extension ships a bundled `data/wordlist.txt` and uses it by default. You can optionally include `data/word_freq.json` (a simple map of `{"word": numericScore}`) to bias suggestions toward more common words. If present, the solver uses `word_freq.json` to break ties and prefer popular words. This avoids CORS/scraping and is preferred for reliability, privacy, and store review friendliness.
 - **Bridge API / Testing**: The content script exposes a `window.wordleSolverBridge` helper with `requestSuggestions`, `isReady`, and `inject` methods for debugging and automated testing. Messages serialize constraints (arrays) and the solver reconstructs Sets on receipt.
 
 ## Files

@@ -5,7 +5,8 @@
   "scripts": {
     "test": "mocha --recursive --exit",
     "test:quick": "node ./tests/run_tests.js",
-    "bench": "node ./bench/benchmark.js"
+    "bench": "node ./bench/benchmark.js",
+    "build:wordfreq": "node ./scripts/build_wordfreq.js"
   },
   "devDependencies": {
     "mocha": "^10.2.0",
