@@ -1,0 +1,60 @@
+name: Publish to Chrome Web Store (template)
+
+on:
+  workflow_dispatch:
+  release:
+    types: [created]
+
+jobs:
+  build-and-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+      - name: Install deps
+        run: npm ci
+      - name: Run tests
+        run: npm test
+      - name: Package extension
+        run: |
+          mkdir -p dist
+          zip -r "dist/extension-${{ github.sha }}.zip" . -x "node_modules/*" \
+            "tests/*" \
+            "**/.git/*" \
+            "**/.github/*" \
+            "**/dist/*"
+      - name: Upload package as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: extension-zip
+          path: dist/*.zip
+
+  publish-to-chrome:
+    needs: build-and-package
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'release'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: extension-zip
+          path: ./dist
+      # The next step uses a community action which requires you to set secrets:
+      # - WEBSTORE_CLIENT_ID
+      # - WEBSTORE_CLIENT_SECRET
+      # - WEBSTORE_REFRESH_TOKEN
+      # - EXTENSION_ID
+      # Follow docs to obtain these credentials and set them in repository secrets before enabling this step.
+      - name: Upload to Chrome Web Store (disabled by default)
+        if: false
+        uses: r0adkll/upload-chrome-extension@v1
+        with:
+          extension_id: ${{ secrets.EXTENSION_ID }}
+          client_id: ${{ secrets.WEBSTORE_CLIENT_ID }}
+          client_secret: ${{ secrets.WEBSTORE_CLIENT_SECRET }}
+          refresh_token: ${{ secrets.WEBSTORE_REFRESH_TOKEN }}
+          zip: ./dist/*.zip

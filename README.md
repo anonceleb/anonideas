@@ -78,10 +78,28 @@ A Chrome Extension that analyzes your Wordle game and suggests the next 3 optima
 ## Privacy
 
 This extension:
-- Only runs on Wordle websites
+- Only runs on Wordle websites unless the user grants optional host access
 - Does not collect or transmit any data
 - All processing happens locally in your browser
 - Only fetches the word list from the public GitHub Gist
+
+## Publishing / Chrome Web Store
+
+I prepared the repository to be ready for publishing. Key items included:
+
+- Added `PRIVACY.md` explaining that the extension does not collect personal data
+- Removed broad manifest `host_permissions` and added `optional_host_permissions` for common Wordle domains
+- Added `icons/icon.svg` and an `icons/README.md` explaining how to create PNG icons for the store
+- Added `scripts/package_extension.sh` to create a ZIP and a `.github/workflows/publish-chrome.yml` template to package and optionally publish via CI
+
+Before publishing, verify the following:
+
+1. Add/convert PNG icons to `icons/icon16.png`, `icons/icon48.png`, and `icons/icon128.png`.
+2. Update `manifest.json` `version` field (increment semantic version) and confirm `homepage_url` and other metadata.
+3. Run `npm test` and package using `scripts/package_extension.sh` and inspect the created ZIP.
+4. Create a Chrome Developer account, prepare listing assets (screenshots, description), and set up OAuth credentials for automated publishing if desired.
+
+If you'd like, I can scaffold a small GitHub Action that will automatically publish a tagged release to the Chrome Web Store once you provide the required OAuth secrets and `EXTENSION_ID`.
 
 ## License
 
