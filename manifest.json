@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "Wordle Optimal Solver",
+  "version": "1.0.0",
+  "description": "Suggests optimal Wordle guesses using information theory",
+  "permissions": [
+    "activeTab"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": ["content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["solver.js", "strategist.js", "data/wordlist.txt"],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ]
+}

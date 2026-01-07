@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Wordle Solver Test</title>
+</head>
+<body>
+    <h1>Testing Wordle Solver Extension</h1>
+    <p>Open the console to see if content.js is running.</p>
+    <script>
+        console.log('Test page loaded');
+        window.addEventListener('message', (e) => {
+          if (e.data && e.data.source === 'wordle-solver-extension') {
+            console.log('Test page: message from solver-extension:', e.data);
+          }
+        });
+        // Check if extension is injecting (direct check) and also test message roundtrip
+        setTimeout(async () => {
+            if (window.wordleSolver) {
+                console.log('✓ wordleSolver found (direct API)!');
+            } else {
+                console.log('✗ wordleSolver not found (direct check)');
+            }
+            console.log('Test page: sending message-based get-suggestions request (empty constraints)'); 
+            window.postMessage({ source: 'wordle-solver-extension', type: 'get-suggestions', id: 'test-1', payload: { constraints: { correct: {}, present: {}, absent: [] } } }, '*');
+
+            // If bridge is present, use it as well
+            if (window.wordleSolverBridge && typeof window.wordleSolverBridge.requestSuggestions === 'function') {
+              try {
+                const res = await window.wordleSolverBridge.requestSuggestions({ correct: {}, present: {}, absent: [] });
+                console.log('Test page: bridge suggestions:', res);
+              } catch (err) {
+                console.error('Test page: bridge request failed:', err);
+              }
+            }
+        }, 2000);
+    </script>
+</body>
+</html>

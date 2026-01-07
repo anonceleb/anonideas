@@ -1,0 +1,274 @@
+#wordle-solver-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  width: 400px;
+  max-width: 90vw;
+  background: #ffffff;
+  border: 2px solid #6aaa64;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 10000;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  font-size: 14px;
+}
+
+.wordle-solver-header {
+  background: #6aaa64;
+  color: white;
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-radius: 6px 6px 0 0;
+}
+
+.wordle-solver-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.wordle-solver-header button {
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: white;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  margin-left: 8px;
+  transition: background 0.2s;
+}
+
+.wordle-solver-header button:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+#wordle-solver-content {
+  padding: 16px;
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+.wordle-solver-loading,
+.wordle-solver-error,
+.wordle-solver-info {
+  text-align: center;
+  padding: 20px;
+  color: #666;
+}
+
+.wordle-solver-error {
+  color: #d32f2f;
+}
+
+.wordle-solver-info {
+  color: #6aaa64;
+}
+
+.wordle-solver-suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.wordle-solver-suggestion {
+  background: #f5f5f5;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  padding: 12px;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.wordle-solver-suggestion:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.suggestion-rank {
+  display: inline-block;
+  background: #6aaa64;
+  color: white;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  text-align: center;
+  line-height: 24px;
+  font-weight: bold;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+.suggestion-word {
+  font-size: 24px;
+  font-weight: bold;
+  color: #121213;
+  margin: 8px 0;
+  letter-spacing: 2px;
+  font-family: 'Clear Sans', 'Helvetica Neue', Arial, sans-serif;
+}
+
+.suggestion-score {
+  font-size: 12px;
+  color: #6aaa64;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.suggestion-explanation {
+  font-size: 13px;
+  color: #666;
+  line-height: 1.5;
+  margin-top: 8px;
+}
+
+.wordle-solver-stats {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e0e0e0;
+  font-size: 12px;
+  color: #666;
+  text-align: center;
+}
+
+/* Scrollbar styling */
+#wordle-solver-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+#wordle-solver-content::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+#wordle-solver-content::-webkit-scrollbar-thumb {
+  background: #6aaa64;
+  border-radius: 4px;
+}
+
+#wordle-solver-content::-webkit-scrollbar-thumb:hover {
+  background: #5a9a54;
+}
+
+/* Manual Input Styles */
+.manual-input-section {
+  padding: 16px;
+}
+
+.word-input-container {
+  margin-bottom: 12px;
+}
+
+#word-input {
+  width: 100%;
+  padding: 10px;
+  font-size: 18px;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 4px;
+  border: 2px solid #d3d6da;
+  border-radius: 4px;
+  font-family: 'Clear Sans', 'Helvetica Neue', Arial, sans-serif;
+}
+
+#word-input:focus {
+  outline: none;
+  border-color: #6aaa64;
+}
+
+.manual-input-header {
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: #121213;
+}
+
+.manual-tiles-container {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  justify-content: center;
+}
+
+.manual-tile {
+  width: 50px;
+  height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: bold;
+  border: 2px solid #d3d6da;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  user-select: none;
+  color: #121213;
+  background: #ffffff;
+}
+
+.manual-tile:hover {
+  transform: scale(1.05);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.manual-tile-gray {
+  background: #787c7e;
+  color: white;
+  border-color: #787c7e;
+}
+
+.manual-tile-yellow {
+  background: #c9b458;
+  color: white;
+  border-color: #c9b458;
+}
+
+.manual-tile-green {
+  background: #6aaa64;
+  color: white;
+  border-color: #6aaa64;
+}
+
+.manual-input-help {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 12px;
+  text-align: center;
+}
+
+.manual-input-help .color-gray {
+  color: #787c7e;
+  font-weight: 600;
+}
+
+.manual-input-help .color-yellow {
+  color: #c9b458;
+  font-weight: 600;
+}
+
+.manual-input-help .color-green {
+  color: #6aaa64;
+  font-weight: 600;
+}
+
+.get-suggestions-btn {
+  width: 100%;
+  padding: 12px;
+  background: #6aaa64;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.get-suggestions-btn:hover {
+  background: #5a9a54;
+}
+
+.get-suggestions-btn:active {
+  transform: scale(0.98);
+}

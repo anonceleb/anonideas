@@ -1,0 +1,17 @@
+{
+  "name": "wordle-solver-extension",
+  "version": "1.0.0",
+  "description": "Wordle Optimal Solver Extension - minimal, info-theory-based suggestions",
+  "scripts": {
+    "test": "mocha --recursive --exit",
+    "test:quick": "node ./tests/run_tests.js",
+    "bench": "node ./bench/benchmark.js"
+  },
+  "devDependencies": {
+    "mocha": "^10.2.0",
+    "chai": "^4.3.7"
+  },
+  "author": "",
+  "license": "MIT",
+  "type": "commonjs"
+}
