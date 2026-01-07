@@ -288,7 +288,7 @@
         <div class="manual-input-section">
           <div class="manual-input-header">Enter your guess and mark results:</div>
           <div class="word-input-container">
-            <input type="text" id="word-input" maxlength="5" placeholder="Enter 5 letters" autocomplete="off">
+            <input type="text" id="word-input" maxlength="5" placeholder="Enter up to 5 letters (leave blank for unknowns)" autocomplete="off">
           </div>
           <div id="wordle-solver-tiles" class="manual-tiles-container"></div>
           <div class="manual-input-help">
@@ -326,12 +326,12 @@
         wordInput.addEventListener('input', (e) => {
           const word = e.target.value.toLowerCase().replace(/[^a-z]/g, '').slice(0, 5);
           e.target.value = word;
-          if (word.length === 5) {
-            createTiles(word);
-          } else {
-            const tilesEl = document.getElementById('wordle-solver-tiles');
-            if (tilesEl) tilesEl.innerHTML = '';
-          }
+          createTiles(word);
+        });
+        // ensure tiles are present when focusing even if input is empty
+        wordInput.addEventListener('focus', (e) => {
+          const word = e.target.value.toLowerCase().replace(/[^a-z]/g, '').slice(0, 5);
+          createTiles(word);
         });
       }
       
@@ -419,22 +419,48 @@
         }
       });
     }, 100);
+
+    // Initialize blank editable tiles so users can immediately type or toggle colors
+    createTiles('');
   };
 
-  // Create tiles for word
-  const createTiles = (word) => {
+  // Create tiles for word (editable single-letter fields). Passing empty string creates 5 blank tiles.
+  const createTiles = (word = '') => {
     const tilesContainer = document.getElementById('wordle-solver-tiles');
     if (!tilesContainer) return;
-    
+
     tilesContainer.innerHTML = '';
-    
+
     for (let i = 0; i < 5; i++) {
+      const letter = (word[i] || '').toLowerCase();
       const tile = document.createElement('div');
       tile.className = 'manual-tile manual-tile-gray';
-      tile.dataset.letter = word[i] || '';
+      tile.dataset.letter = letter;
       tile.dataset.state = 'absent';
-      tile.textContent = (word[i] || '').toUpperCase();
-      tile.addEventListener('click', () => {
+
+      // input for the letter (single character)
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.maxLength = 1;
+      input.className = 'tile-letter-input';
+      input.value = (letter || '').toUpperCase();
+
+      input.addEventListener('input', (e) => {
+        const val = e.target.value.toLowerCase().replace(/[^a-z]/g, '').slice(0, 1);
+        e.target.value = val.toUpperCase();
+        tile.dataset.letter = val;
+      });
+
+      // Keep dataset in sync on deletions
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Backspace' || e.key === 'Delete') {
+          setTimeout(() => { tile.dataset.letter = (input.value || '').toLowerCase(); }, 0);
+        }
+      });
+
+      // cycle color when clicking tile but not when focusing or typing in the input
+      tile.addEventListener('click', (ev) => {
+        if (ev.target === input) return; // don't cycle when user is editing the letter
         const states = ['absent', 'present', 'correct'];
         const classes = ['manual-tile-gray', 'manual-tile-yellow', 'manual-tile-green'];
         const currentIdx = states.indexOf(tile.dataset.state);
@@ -442,24 +468,32 @@
         tile.dataset.state = states[nextIdx];
         tile.className = 'manual-tile ' + classes[nextIdx];
       });
+
+      tile.appendChild(input);
       tilesContainer.appendChild(tile);
     }
-  };
+  }; 
 
   // Get suggestions from API
   const getSuggestions = async () => {
-    const tiles = document.querySelectorAll('#wordle-solver-tiles .manual-tile');
-    if (tiles.length !== 5) {
-      alert('Please enter a 5-letter word first');
-      return;
+    let tiles = document.querySelectorAll('#wordle-solver-tiles .manual-tile');
+    if (!tiles || tiles.length === 0) {
+      // ensure tiles exist even if the user hasn't typed anything
+      createTiles('');
+      tiles = document.querySelectorAll('#wordle-solver-tiles .manual-tile');
     }
 
     const constraints = { correct: {}, present: {}, absent: new Set() };
     
     tiles.forEach((tile, index) => {
-      const letter = tile.dataset.letter.toLowerCase();
+      // read letter from the embedded input if present (supports editable/blank tiles)
+      const input = tile.querySelector('input.tile-letter-input');
+      const letter = (input ? (input.value || '') : (tile.dataset.letter || '')).toLowerCase();
       const state = tile.dataset.state;
-      
+
+      // skip blank tiles -- they represent unknown letters
+      if (!letter) return;
+
       if (state === 'correct') {
         constraints.correct[index] = letter;
       } else if (state === 'present') {
@@ -467,11 +501,14 @@
         constraints.present[letter].add(index);
       } else if (state === 'absent') {
         let isPresentElsewhere = false;
-        for (let i = 0; i < 5; i++) {
-          if (i !== index && tiles[i].dataset.letter === letter && 
-              (tiles[i].dataset.state === 'correct' || tiles[i].dataset.state === 'present')) {
-            isPresentElsewhere = true;
-            break;
+        for (let i = 0; i < tiles.length; i++) {
+          if (i !== index) {
+            const otherInput = tiles[i].querySelector('input.tile-letter-input');
+            const otherLetter = (otherInput ? (otherInput.value || '') : (tiles[i].dataset.letter || '')).toLowerCase();
+            if (otherLetter === letter && (tiles[i].dataset.state === 'correct' || tiles[i].dataset.state === 'present')) {
+              isPresentElsewhere = true;
+              break;
+            }
           }
         }
         if (!isPresentElsewhere) constraints.absent.add(letter);

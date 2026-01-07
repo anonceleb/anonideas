@@ -212,6 +212,25 @@
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
+/* Editable single-letter input inside a tile */
+.manual-tile input.tile-letter-input {
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  text-align: center;
+  font-size: 24px;
+  font-weight: bold;
+  text-transform: uppercase;
+  color: inherit;
+  caret-color: white;
+}
+
+.manual-tile input.tile-letter-input:focus {
+  outline: none;
+}
+
 .manual-tile-gray {
   background: #787c7e;
   color: white;
