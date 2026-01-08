@@ -141,9 +141,19 @@ console.log('Passed:', testsPassed);
 console.log('Failed:', testsFailed);
 
 if (testsFailed === 0) {
-  console.log('\n✓ All tests passed!');
-  process.exit(0);
+  console.log('\n✓ All entropy validation tests passed!');
+  // Run attempt-strategy tests as an additional safety check
+  try {
+    const { execSync } = require('child_process');
+    console.log('\nRunning attempt strategy tests...');
+    execSync('node scripts/test_attempt_strategy.js', { stdio: 'inherit' });
+    console.log('\n✓ All strategy tests passed!');
+    process.exit(0);
+  } catch (e) {
+    console.error('\n✗ Strategy tests failed or errored:', e && e.message ? e.message : e);
+    process.exit(1);
+  }
 } else {
-  console.log('\n✗ Some tests failed!');
+  console.log('\n✗ Some entropy validation tests failed!');
   process.exit(1);
 }

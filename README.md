@@ -49,3 +49,20 @@ The validation system is based on established research:
 - Shannon's Information Theory (1948)
 - "The Entropy of Words" by Bentz et al. (2017) - arXiv:1606.06996
 - Natural language entropy typically ranges from 6-12 bits per word
+
+---
+
+## Streak-aware recommendations (new)
+
+The solver now accepts the player's current attempt number and adjusts recommendations to prioritize saving a streak when attempts are limited. Key points:
+
+- Input: pass `gameState.attemptNumber` (1-6) to `getSuggestions`.
+- Behavior: when the remaining attempts are low (2 or fewer), the solver prioritizes words that maximize the immediate chance of success and minimize expected remaining candidates. For earlier attempts the solver keeps the entropy-first strategy.
+- Opt-out / Rollback: set `gameState.options = { optimizeForStreak: false }` to restore legacy behavior (entropy-first sorting). If a revert is necessary, run `git revert <commit>` for the change commit.
+- Output: each suggestion now includes additional diagnostic fields:
+  - `chancesLeft`: number of guesses remaining including the current one
+  - `depthLeft`: number of guesses remaining after the current guess
+  - `expectedRemaining`: estimated expected number of remaining candidate words after making the guess
+  - `winProbability`: estimated probability the guess is the solution (uniform assumption over possible words)
+
+Performance note: the new calculations compute pattern distributions to calculate expected remaining candidates — this can add CPU overhead for large candidate pools. Use `optimizeForStreak: false` to skip the streak-aware sorting if you notice performance impact.
