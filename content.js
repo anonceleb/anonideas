@@ -23,7 +23,9 @@
         <label>Attempt #: <input id="ws-attempt" type="number" min="1" max="6" value="1" /></label>
         <label><input id="ws-optimize" type="checkbox" checked /> Optimize for streak</label>
         <button id="ws-run">Get Suggestions</button>
+        <button id="ws-refresh">Refresh wordlist</button>
       </div>
+      <div style="margin-top:8px;font-size:12px;color:#444">Word list: <span id="ws-wordlist-count">unknown</span> words</div>
       <div id="wordle-solver-tilerow" aria-label="Manual input row" role="group"></div>
       <div id="wordle-solver-results"></div>
     </div>
@@ -51,6 +53,8 @@
   const panel = root.querySelector('#wordle-solver-panel');
   const closeBtn = root.querySelector('#wordle-solver-close');
   const runBtn = root.querySelector('#ws-run');
+  const refreshBtn = root.querySelector('#ws-refresh');
+  const wordlistCountEl = root.querySelector('#ws-wordlist-count');
   const attemptInput = root.querySelector('#ws-attempt');
   const optimizeCheckbox = root.querySelector('#ws-optimize');
   const tileRow = root.querySelector('#wordle-solver-tilerow');
@@ -135,6 +139,7 @@
 
   // Request/response plumbing with solver (page context)
   const pending = new Map();
+  const refreshPending = new Map();
   window.addEventListener('message', (ev) => {
     const d = ev.data || {};
     if (d && d.source === 'wordle-solver-extension') {
@@ -151,6 +156,13 @@
       if (d.type === 'solver-ready') {
         // indicate UI is ready
         toggle.title = 'Wordle Solver (ready)';
+        return;
+      }
+
+      // refresh-wordlist response (from solver)
+      if (d.type === 'refresh-wordlist-response' && d.id && refreshPending.has(d.id)) {
+        refreshPending.get(d.id).resolve(d);
+        refreshPending.delete(d.id);
         return;
       }
 
@@ -202,6 +214,38 @@
     });
   }
 
+  function requestRefreshWordlist() {
+    return new Promise((resolve, reject) => {
+      const id = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
+      refreshPending.set(id, { resolve, reject });
+      window.postMessage({ source: 'wordle-solver-extension', type: 'refresh-wordlist', id }, '*');
+      setTimeout(() => {
+        if (refreshPending.has(id)) {
+          refreshPending.get(id).reject(new Error('Timeout waiting for wordlist refresh'));
+          refreshPending.delete(id);
+        }
+      }, 10000);
+    });
+  }
+
+  // Hook refresh button
+  refreshBtn.addEventListener('click', async () => {
+    refreshBtn.disabled = true; refreshBtn.textContent = 'Refreshing...';
+    try {
+      const r = await requestRefreshWordlist();
+      refreshBtn.disabled = false; refreshBtn.textContent = 'Refresh wordlist';
+      if (r && r.ok) {
+        wordlistCountEl.textContent = r.count || 'unknown';
+        results.innerHTML = `<div style="color:#080">Wordlist refreshed from ${r.source || 'remote'}. Count: ${r.count || 'unknown'}</div>`;
+      } else {
+        results.innerHTML = `<div style="color:#900">Refresh failed: ${r && r.error ? r.error : 'unknown'}</div>`;
+      }
+    } catch (err) {
+      refreshBtn.disabled = false; refreshBtn.textContent = 'Refresh wordlist';
+      results.innerHTML = `<div style="color:#900">Refresh failed: ${err.message}</div>`;
+    }
+  });
+
   runBtn.addEventListener('click', async () => {
     results.innerHTML = '<div>Loading...</div>';
     const attemptNumber = Number(attemptInput.value) || undefined;
@@ -231,6 +275,31 @@
 
     try {
       const res = await requestSuggestions(payload);
+
+      // If solver indicates there were very few or no possible words, suggest a refresh and show wordlist size
+      if (res && typeof res.total === 'number' && res.total === 0) {
+        results.innerHTML = `<div style="color:#900">No matches found (wordlist size: ${wordlistCountEl.textContent}).</div>` +
+                            `<div style="color:#666;margin-top:6px;font-size:12px">Try <button id="ws-refresh-inline">Refresh wordlist</button></div>`;
+        const refreshInline = document.getElementById('ws-refresh-inline');
+        if (refreshInline) refreshInline.addEventListener('click', async () => {
+          try {
+            refreshBtn.disabled = true; refreshBtn.textContent = 'Refreshing...';
+            const r = await requestRefreshWordlist();
+            refreshBtn.disabled = false; refreshBtn.textContent = 'Refresh wordlist';
+            if (r && r.ok) {
+              wordlistCountEl.textContent = r.count || 'unknown';
+              results.innerHTML = '<div style="color:#080">Wordlist refreshed — try again</div>';
+            } else {
+              results.innerHTML = `<div style="color:#900">Refresh failed: ${r && r.error ? r.error : 'unknown'}</div>`;
+            }
+          } catch (err) {
+            refreshBtn.disabled = false; refreshBtn.textContent = 'Refresh wordlist';
+            results.innerHTML = `<div style="color:#900">Refresh failed: ${err.message}</div>`;
+          }
+        });
+        return;
+      }
+
       displayResults(res);
     } catch (e) {
       results.innerHTML = `<div style="color:#900">Error: ${e.message}</div>`;
