@@ -62,28 +62,42 @@
   function renderTiles() {
     tileRow.innerHTML = '';
     tiles.forEach((t, i) => {
-      const btn = document.createElement('button');
-      btn.className = 'ws-tile';
-      btn.type = 'button';
-      btn.dataset.index = i;
-      btn.title = 'Click to edit letter; double-click or space to cycle color (unknown → absent → present → correct)';
-      btn.innerHTML = `<div class="tile-letter">${t.letter || ''}</div><div class="tile-color">${t.color === 'unknown' ? '' : t.color[0].toUpperCase()}</div>`;
-      Object.assign(btn.style, { width: '44px', height: '52px', marginRight: '6px', fontWeight: '700', display: 'inline-block' });
-      btn.addEventListener('click', (e) => {
-        const idx = Number(btn.dataset.index);
-        const val = prompt('Enter letter (leave blank to clear):', tiles[idx].letter || '');
-        tiles[idx].letter = (val || '').toLowerCase().slice(0,1).replace(/[^a-z]/g,'');
-        renderTiles();
+      const wrapper = document.createElement('div');
+      wrapper.className = 'ws-tile';
+      wrapper.dataset.index = i;
+      wrapper.setAttribute('data-color', t.color);
+
+      const inp = document.createElement('input');
+      inp.type = 'text'; inp.maxLength = 1; inp.className = 'ws-tile-input'; inp.value = t.letter ? t.letter.toUpperCase() : '';
+      inp.autocomplete = 'off'; inp.spellcheck = false;
+      inp.addEventListener('input', (ev) => {
+        const v = (ev.target.value || '').toLowerCase().slice(0,1).replace(/[^a-z]/g,'');
+        tiles[i].letter = v;
+        ev.target.value = v ? v.toUpperCase() : '';
       });
-      btn.addEventListener('dblclick', () => {
-        cycleColor(Number(btn.dataset.index));
-        renderTiles();
+      inp.addEventListener('keydown', (ev) => {
+        if (ev.code === 'Space') { ev.preventDefault(); cycleColor(i); updateTileColor(wrapper, i); }
+        if (ev.key === 'Backspace') { tiles[i].letter = ''; setTimeout(() => { ev.target.value = ''; }, 0); }
       });
-      btn.addEventListener('keydown', (ev) => {
-        if (ev.code === 'Space') { ev.preventDefault(); cycleColor(Number(btn.dataset.index)); renderTiles(); }
-      });
-      tileRow.appendChild(btn);
+
+      const colorBtn = document.createElement('button');
+      colorBtn.type = 'button'; colorBtn.className = 'ws-tile-colorbtn'; colorBtn.title = 'Cycle color';
+      colorBtn.addEventListener('click', () => { cycleColor(i); updateTileColor(wrapper, i); });
+
+      wrapper.appendChild(inp);
+      wrapper.appendChild(colorBtn);
+      tileRow.appendChild(wrapper);
+      updateTileColor(wrapper, i);
     });
+  }
+
+  function updateTileColor(el, idx) {
+    const c = tiles[idx].color;
+    el.setAttribute('data-color', c);
+    const btn = el.querySelector('.ws-tile-colorbtn');
+    btn.textContent = c === 'unknown' ? '' : c[0].toUpperCase();
+    const input = el.querySelector('.ws-tile-input');
+    // visual styles are handled via CSS attribute selectors
   }
 
   function cycleColor(idx) {
@@ -99,10 +113,18 @@
   // add a short inline style for tiles
   const tileStyle = document.createElement('style');
   tileStyle.textContent = `
-    .ws-tile { background:#f3f4f6; border-radius:4px; border:1px solid #ddd; cursor:pointer; }
-    .ws-tile[aria-pressed="true"] { outline:2px solid #3b82f6 }
-    .ws-tile .tile-letter { font-size:20px; text-align:center }
-    .ws-tile .tile-color { font-size:11px; text-align:center; color:#555 }
+    .ws-tile { display:inline-flex; flex-direction:column; align-items:center; justify-content:center; width:48px; height:60px; margin-right:8px; border-radius:6px; border:1px solid #ddd; background:#fff }
+    .ws-tile-input { width:36px; height:36px; font-size:20px; text-align:center; border:none; background:transparent; outline:none }
+    .ws-tile-colorbtn { width:28px; height:18px; font-size:11px; border-radius:4px; border:none; margin-top:4px; cursor:pointer }
+
+    .ws-tile[data-color="unknown"] { background:#f3f4f6; }
+    .ws-tile[data-color="absent"] { background:#787c7e; color:#fff }
+    .ws-tile[data-color="present"] { background:#c9b458; color:#111 }
+    .ws-tile[data-color="correct"] { background:#6aaa64; color:#fff }
+
+    .ws-item { padding:6px 8px; border-bottom:1px solid #eee }
+    .ws-word { font-weight:700 }
+    .ws-meta { color:#666; font-size:12px }
   `;
   document.head.appendChild(tileStyle);
   toggle.addEventListener('click', () => {
@@ -187,13 +209,6 @@
 
     // Build constraints from manual tiles
     const constraints = { correct: {}, present: {}, absent: [] };
-    const letterCounts = {};
-    tiles.forEach((t, i) => {
-      const l = (t.letter || '').toLowerCase();
-      if (!l) return;
-      letterCounts[l] = (letterCounts[l] || 0) + 1;
-    });
-
     tiles.forEach((t, i) => {
       const l = (t.letter || '').toLowerCase();
       if (!l) return;
@@ -203,13 +218,13 @@
         if (!constraints.present[l]) constraints.present[l] = [];
         constraints.present[l].push(i);
       } else if (t.color === 'absent') {
-        // only mark as absent if letter not marked present or correct elsewhere in the same row
         const usedElsewhere = tiles.some((t2, j) => j !== i && (t2.letter || '').toLowerCase() === l && (t2.color === 'present' || t2.color === 'correct'));
-        if (!usedElsewhere && !Object.values(constraints.present || {}).flat().includes(i)) {
-          constraints.absent.push(l);
-        }
+        if (!usedElsewhere) constraints.absent.push(l);
       }
     });
+
+    // Debug: show constructed constraints in console so you can verify
+    console.log('Wordle Solver: Posting constraints:', constraints);
 
     const payload = { guesses: [], constraints, options: { optimizeForStreak } };
     if (typeof attemptNumber === 'number' && attemptNumber >= 1 && attemptNumber <= 6) payload.attemptNumber = attemptNumber;
