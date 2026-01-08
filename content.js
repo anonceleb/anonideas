@@ -24,6 +24,7 @@
         <label><input id="ws-optimize" type="checkbox" checked /> Optimize for streak</label>
         <button id="ws-run">Get Suggestions</button>
         <button id="ws-refresh">Refresh wordlist</button>
+        <button id="ws-clear" style="background:#ef4444;color:#fff;border-radius:6px;padding:6px 8px;border:none;margin-left:6px">Clear row</button>
       </div>
       <div style="margin-top:8px;font-size:12px;color:#444">Word list: <span id="ws-wordlist-count">unknown</span> words</div>
       <div id="wordle-solver-tilerow" aria-label="Manual input row" role="group"></div>
@@ -54,11 +55,15 @@
   const closeBtn = root.querySelector('#wordle-solver-close');
   const runBtn = root.querySelector('#ws-run');
   const refreshBtn = root.querySelector('#ws-refresh');
+  const clearBtn = document.createElement('button'); clearBtn.id = 'ws-clear'; clearBtn.textContent = 'Clear row';
   const wordlistCountEl = root.querySelector('#ws-wordlist-count');
   const attemptInput = root.querySelector('#ws-attempt');
   const optimizeCheckbox = root.querySelector('#ws-optimize');
   const tileRow = root.querySelector('#wordle-solver-tilerow');
   const results = root.querySelector('#wordle-solver-results');
+
+  // Auto-refresh guard (refresh at most once per page session automatically)
+  let autoRefreshed = false;
 
   // Tile state: each tile has { letter, color } color: 'absent' | 'present' | 'correct' | 'unknown'
   const tiles = Array.from({ length: 5 }, (_, i) => ({ letter: '', color: 'unknown' }));
@@ -79,6 +84,14 @@
         const v = (ev.target.value || '').toLowerCase().slice(0,1).replace(/[^a-z]/g,'');
         tiles[i].letter = v;
         ev.target.value = v ? v.toUpperCase() : '';
+        // auto-focus next tile when a letter is entered
+        if (v) {
+          const next = tileRow.children[i+1];
+          if (next) {
+            const ni = next.querySelector('.ws-tile-input');
+            if (ni) ni.focus();
+          }
+        }
       });
       inp.addEventListener('keydown', (ev) => {
         ev.stopPropagation();
@@ -119,23 +132,45 @@
   // add a short inline style for tiles
   const tileStyle = document.createElement('style');
   tileStyle.textContent = `
-    .ws-tile { display:inline-flex; flex-direction:column; align-items:center; justify-content:center; width:48px; height:60px; margin-right:8px; border-radius:6px; border:1px solid #ddd; background:#fff }
+    .ws-tile { display:inline-flex; flex-direction:column; align-items:center; justify-content:center; width:48px; height:60px; margin-right:8px; border-radius:6px; border:2px solid transparent; background:#fff }
     .ws-tile-input { width:36px; height:36px; font-size:20px; text-align:center; border:none; background:transparent; outline:none }
     .ws-tile-colorbtn { width:28px; height:18px; font-size:11px; border-radius:4px; border:none; margin-top:4px; cursor:pointer }
 
-    .ws-tile[data-color="unknown"] { background:#f3f4f6; }
-    .ws-tile[data-color="absent"] { background:#787c7e; color:#fff }
-    .ws-tile[data-color="present"] { background:#c9b458; color:#111 }
-    .ws-tile[data-color="correct"] { background:#6aaa64; color:#fff }
+    /* stronger color indication: tile background + prominent colored bottom stripe */
+    .ws-tile[data-color="unknown"] { background:#f3f4f6; border-color:transparent; }
+    .ws-tile[data-color="absent"] { background:#787c7e; color:#fff; border-color:#4b5563 }
+    .ws-tile[data-color="present"] { background:#c9b458; color:#111; border-color:#a78b1a }
+    .ws-tile[data-color="correct"] { background:#6aaa64; color:#fff; border-color:#4b9a4b }
+
+    .ws-tile::after { content:''; display:block; width:100%; height:6px; border-radius:0 0 6px 6px; margin-top:4px; }
+    .ws-tile[data-color="absent"]::after { background:#4b5563 }
+    .ws-tile[data-color="present"]::after { background:#a78b1a }
+    .ws-tile[data-color="correct"]::after { background:#4b9a4b }
 
     .ws-item { padding:6px 8px; border-bottom:1px solid #eee }
     .ws-word { font-weight:700 }
     .ws-meta { color:#666; font-size:12px }
+    .ws-help { font-size:11px; color:#444; margin-top:8px }
   `;
   document.head.appendChild(tileStyle);
-  toggle.addEventListener('click', () => {
+  toggle.addEventListener('click', async () => {
     const hidden = panel.getAttribute('aria-hidden') === 'true';
     panel.setAttribute('aria-hidden', String(!hidden));
+    // Auto-refresh wordlist once when first opening the panel to avoid zero-match scenarios
+    if (!hidden && !autoRefreshed) {
+      try {
+        wordlistCountEl.textContent = 'refreshing...';
+        const r = await requestRefreshWordlist();
+        if (r && r.ok) {
+          wordlistCountEl.textContent = r.count || 'unknown';
+          autoRefreshed = true;
+        } else {
+          wordlistCountEl.textContent = 'unknown';
+        }
+      } catch (e) {
+        wordlistCountEl.textContent = 'unknown';
+      }
+    }
   });
   closeBtn.addEventListener('click', () => panel.setAttribute('aria-hidden', 'true'));
 
@@ -303,11 +338,31 @@
       }
 
       displayResults(res);
+      // If no matches and we haven't auto-refreshed yet, auto-refresh wordlist and retry once
+      if (res && typeof res.total === 'number' && res.total === 0 && !autoRefreshed) {
+        try {
+          autoRefreshed = true;
+          results.innerHTML = '<div style="color:#666">No matches found — auto-refreshing wordlist...</div>';
+          refreshBtn.disabled = true; refreshBtn.textContent = 'Refreshing...';
+          const r = await requestRefreshWordlist();
+          refreshBtn.disabled = false; refreshBtn.textContent = 'Refresh wordlist';
+          if (r && r.ok) {
+            wordlistCountEl.textContent = r.count || 'unknown';
+            // Retry same query
+            const retry = await requestSuggestions(payload);
+            displayResults(retry);
+          } else {
+            results.innerHTML = `<div style="color:#900">Refresh failed: ${r && r.error ? r.error : 'unknown'}</div>`;
+          }
+        } catch (err) {
+          refreshBtn.disabled = false; refreshBtn.textContent = 'Refresh wordlist';
+          results.innerHTML = `<div style="color:#900">Auto-refresh failed: ${err.message}</div>`;
+        }
+      }
     } catch (e) {
       results.innerHTML = `<div style="color:#900">Error: ${e.message}</div>`;
     }
   });
-
   function displayResults(obj) {
     if (!obj) { results.innerHTML = '<div>No suggestions</div>'; return; }
     const list = obj.suggestions || obj;
@@ -323,7 +378,8 @@
             (s.chancesLeft !== undefined ? ` • Chances left: ${s.chancesLeft}` : '') +
           `</div>
         </div>
-      `).join('');
+      `).join('') +
+      `<div class="ws-help">Expected remaining = average remaining candidates after this guess. Worst remaining = largest bucket after this guess (worst-case). Depth est = cheap upper-bound of extra guesses needed.</div>`;
   }
 
 })();
