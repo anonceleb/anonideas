@@ -24,6 +24,7 @@
         <label><input id="ws-optimize" type="checkbox" checked /> Optimize for streak</label>
         <button id="ws-run">Get Suggestions</button>
       </div>
+      <div id="wordle-solver-tilerow" aria-label="Manual input row" role="group"></div>
       <div id="wordle-solver-results"></div>
     </div>
   `;
@@ -52,8 +53,58 @@
   const runBtn = root.querySelector('#ws-run');
   const attemptInput = root.querySelector('#ws-attempt');
   const optimizeCheckbox = root.querySelector('#ws-optimize');
+  const tileRow = root.querySelector('#wordle-solver-tilerow');
   const results = root.querySelector('#wordle-solver-results');
 
+  // Tile state: each tile has { letter, color } color: 'absent' | 'present' | 'correct' | 'unknown'
+  const tiles = Array.from({ length: 5 }, (_, i) => ({ letter: '', color: 'unknown' }));
+
+  function renderTiles() {
+    tileRow.innerHTML = '';
+    tiles.forEach((t, i) => {
+      const btn = document.createElement('button');
+      btn.className = 'ws-tile';
+      btn.type = 'button';
+      btn.dataset.index = i;
+      btn.title = 'Click to edit letter; double-click or space to cycle color (unknown → absent → present → correct)';
+      btn.innerHTML = `<div class="tile-letter">${t.letter || ''}</div><div class="tile-color">${t.color === 'unknown' ? '' : t.color[0].toUpperCase()}</div>`;
+      Object.assign(btn.style, { width: '44px', height: '52px', marginRight: '6px', fontWeight: '700', display: 'inline-block' });
+      btn.addEventListener('click', (e) => {
+        const idx = Number(btn.dataset.index);
+        const val = prompt('Enter letter (leave blank to clear):', tiles[idx].letter || '');
+        tiles[idx].letter = (val || '').toLowerCase().slice(0,1).replace(/[^a-z]/g,'');
+        renderTiles();
+      });
+      btn.addEventListener('dblclick', () => {
+        cycleColor(Number(btn.dataset.index));
+        renderTiles();
+      });
+      btn.addEventListener('keydown', (ev) => {
+        if (ev.code === 'Space') { ev.preventDefault(); cycleColor(Number(btn.dataset.index)); renderTiles(); }
+      });
+      tileRow.appendChild(btn);
+    });
+  }
+
+  function cycleColor(idx) {
+    const order = ['unknown','absent','present','correct'];
+    const cur = tiles[idx].color;
+    const next = order[(order.indexOf(cur) + 1) % order.length];
+    tiles[idx].color = next;
+  }
+
+  // initial render
+  renderTiles();
+
+  // add a short inline style for tiles
+  const tileStyle = document.createElement('style');
+  tileStyle.textContent = `
+    .ws-tile { background:#f3f4f6; border-radius:4px; border:1px solid #ddd; cursor:pointer; }
+    .ws-tile[aria-pressed="true"] { outline:2px solid #3b82f6 }
+    .ws-tile .tile-letter { font-size:20px; text-align:center }
+    .ws-tile .tile-color { font-size:11px; text-align:center; color:#555 }
+  `;
+  document.head.appendChild(tileStyle);
   toggle.addEventListener('click', () => {
     const hidden = panel.getAttribute('aria-hidden') === 'true';
     panel.setAttribute('aria-hidden', String(!hidden));
@@ -133,8 +184,36 @@
     results.innerHTML = '<div>Loading...</div>';
     const attemptNumber = Number(attemptInput.value) || undefined;
     const optimizeForStreak = optimizeCheckbox.checked;
-    const payload = { guesses: [], constraints: { correct: {}, present: {}, absent: [] }, options: { optimizeForStreak } };
+
+    // Build constraints from manual tiles
+    const constraints = { correct: {}, present: {}, absent: [] };
+    const letterCounts = {};
+    tiles.forEach((t, i) => {
+      const l = (t.letter || '').toLowerCase();
+      if (!l) return;
+      letterCounts[l] = (letterCounts[l] || 0) + 1;
+    });
+
+    tiles.forEach((t, i) => {
+      const l = (t.letter || '').toLowerCase();
+      if (!l) return;
+      if (t.color === 'correct') {
+        constraints.correct[i] = l;
+      } else if (t.color === 'present') {
+        if (!constraints.present[l]) constraints.present[l] = [];
+        constraints.present[l].push(i);
+      } else if (t.color === 'absent') {
+        // only mark as absent if letter not marked present or correct elsewhere in the same row
+        const usedElsewhere = tiles.some((t2, j) => j !== i && (t2.letter || '').toLowerCase() === l && (t2.color === 'present' || t2.color === 'correct'));
+        if (!usedElsewhere && !Object.values(constraints.present || {}).flat().includes(i)) {
+          constraints.absent.push(l);
+        }
+      }
+    });
+
+    const payload = { guesses: [], constraints, options: { optimizeForStreak } };
     if (typeof attemptNumber === 'number' && attemptNumber >= 1 && attemptNumber <= 6) payload.attemptNumber = attemptNumber;
+
     try {
       const res = await requestSuggestions(payload);
       displayResults(res);
