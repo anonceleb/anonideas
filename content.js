@@ -372,14 +372,12 @@
         <div class="ws-item">
           <div class="ws-word">${s.word}</div>
           <div class="ws-meta">Entropy: ${Number(s.entropy).toFixed(2)} bits` +
-            (s.expectedRemaining !== undefined ? ` • Expected remaining: ${Number(s.expectedRemaining).toFixed(2)}` : '') +
-            (s.worstRemaining !== undefined ? ` • Worst remaining: ${s.worstRemaining}` : '') +
             (s.depthEstimate !== undefined ? ` • Depth est: ${s.depthEstimate}` : '') +
             (s.chancesLeft !== undefined ? ` • Chances left: ${s.chancesLeft}` : '') +
           `</div>
         </div>
       `).join('') +
-      `<div class="ws-help">Expected remaining = average remaining candidates after this guess. Worst remaining = largest bucket after this guess (worst-case). Depth est = cheap upper-bound of extra guesses needed.</div>`;
+      `<div class="ws-help">Depth est = a cheap upper-bound of extra guesses needed (lower is better).</div>`;
   }
 
 })();

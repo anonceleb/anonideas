@@ -62,8 +62,6 @@ The solver now accepts the player's current attempt number and adjusts recommend
 - Output: each suggestion now includes additional diagnostic fields:
   - `chancesLeft`: number of guesses remaining including the current one
   - `depthLeft`: number of guesses remaining after the current guess
-  - `expectedRemaining`: estimated expected number of remaining candidate words after making the guess
-  - `worstRemaining`: maximum candidate count in any pattern bucket for this guess (worst-case remaining)
   - `depthEstimate`: approximate worst-case additional guesses needed (ceil(log2(worstRemaining)))
 
 Performance note: the new calculations compute pattern distributions to calculate expected remaining candidates — this can add CPU overhead for large candidate pools. Use `optimizeForStreak: false` to skip the streak-aware sorting if you notice performance impact.

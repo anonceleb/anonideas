@@ -138,11 +138,10 @@
     return pattern.join(',');
   };
 
-  // Calculate expected information (entropy)
-  // Calculate expected information (entropy) and expected remaining candidates for a guess
-  // Returns an object: { entropy: Number, expectedRemaining: Number }
+  // Calculate expected information (entropy) and a cheap depth estimate for a guess
+  // Returns an object: { entropy: Number, depthEstimate: Number }
   const calculateExpectedInfo = (guess, possibleWords) => {
-    if (possibleWords.length === 0 || possibleWords.length === 1) return { entropy: 0, expectedRemaining: possibleWords.length };
+    if (possibleWords.length === 0 || possibleWords.length === 1) return { entropy: 0, depthEstimate: 0 };
 
     const patternCounts = {};
     for (const solution of possibleWords) {
@@ -157,20 +156,14 @@
       if (p > 0) entropy -= p * Math.log2(p);
     }
 
-    // Expected remaining candidates after making this guess is sum_{patterns} p(pattern) * count(pattern)
-    // which simplifies to sum(count^2)/total
-    let sumSq = 0;
+    // depthEstimate: cheap worst-case estimate based on largest bucket size
     let maxCount = 0;
     for (const count of Object.values(patternCounts)) {
-      sumSq += count * count;
       if (count > maxCount) maxCount = count;
     }
-    const expectedRemaining = sumSq / total;
-    // depthEstimate: approximate worst-case additional guesses needed, using log2(maxCount)
-    const worstRemaining = maxCount;
-    const depthEstimate = worstRemaining <= 1 ? 0 : Math.ceil(Math.log2(worstRemaining));
+    const depthEstimate = maxCount <= 1 ? 0 : Math.ceil(Math.log2(maxCount));
 
-    return { entropy, expectedRemaining, worstRemaining, depthEstimate };
+    return { entropy, depthEstimate };
   };
 
 
@@ -244,12 +237,10 @@
           const isKnown = gameState && gameState.constraints && Object.prototype.hasOwnProperty.call(gameState.constraints.correct, i);
           if (!isKnown) posScore += (posFreqArrLocal[i][w[i]] || 0);
         }
-        const { entropy, expectedRemaining, worstRemaining, depthEstimate } = calculateExpectedInfo(w, possibleWords);
+        const { entropy, depthEstimate } = calculateExpectedInfo(w, possibleWords);
         return {
           word: w,
           entropy,
-          expectedRemaining,
-          worstRemaining,
           depthEstimate,
           freqScore: scoreByLetterFreqLocal(w),
           posScore
@@ -262,10 +253,9 @@
       if (optimizeForStreak && typeof gameState.attemptNumber === 'number') {
         const chancesLeft = Math.max(0, 6 - gameState.attemptNumber + 1);
         scoredPossible.sort((a, b) => {
-          // last attempts: prefer smaller depth estimate, then smaller worstRemaining, then entropy
+          // last attempts: prefer smaller depth estimate, then entropy
           if (chancesLeft <= 2) {
             if (a.depthEstimate !== b.depthEstimate) return a.depthEstimate - b.depthEstimate;
-            if (a.worstRemaining !== b.worstRemaining) return a.worstRemaining - b.worstRemaining;
             const d = b.entropy - a.entropy; if (Math.abs(d) > 1e-9) return d;
             const f = b.freqScore - a.freqScore; if (f !== 0) return f;
             const p = b.posScore - a.posScore; if (p !== 0) return p;
@@ -296,8 +286,6 @@
         explanation: `Entropy: ${item.entropy.toFixed(2)} bits — narrows to ${possibleWords.length} remaining possibilities.`,
         chancesLeft: typeof gameState.attemptNumber === 'number' ? Math.max(0, 6 - gameState.attemptNumber + 1) : undefined,
         depthLeft: typeof gameState.attemptNumber === 'number' ? Math.max(0, 6 - gameState.attemptNumber) : undefined,
-        expectedRemaining: item.expectedRemaining,
-        worstRemaining: item.worstRemaining,
         depthEstimate: item.depthEstimate
       })), total: possibleWords.length };
     }
@@ -449,13 +437,11 @@
         }
       }
 
-      const { entropy, expectedRemaining, worstRemaining, depthEstimate } = calculateExpectedInfo(word, possibleWords);
+      const { entropy, depthEstimate } = calculateExpectedInfo(word, possibleWords);
 
       return {
         word,
         entropy,
-        expectedRemaining,
-        worstRemaining,
         depthEstimate,
         freqScore: (wordFreqMap && typeof wordFreqMap[word] === 'number') ? wordFreqMap[word] : scoreByLetterFreq(word),
         posScore

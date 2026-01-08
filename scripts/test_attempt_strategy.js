@@ -11,13 +11,13 @@ function expectOrder(a, b, chancesLeft, expected) {
 console.log('=== Running attempt strategy tests ===');
 
 // Prefer smaller depthEstimate on last attempts
-const a = { word: 'alpha', entropy: 2.0, depthEstimate: 1, worstRemaining: 2, freqScore: 10, posScore: 5 };
-const b = { word: 'bravo', entropy: 3.0, depthEstimate: 3, worstRemaining: 8, freqScore: 8, posScore: 4 };
+const a = { word: 'alpha', entropy: 2.0, depthEstimate: 1, freqScore: 10, posScore: 5 };
+const b = { word: 'bravo', entropy: 3.0, depthEstimate: 3, freqScore: 8, posScore: 4 };
 expectOrder(a, b, 1, -1); // a should be preferred because smaller depthEstimate
 
-// If equal depthEstimate, smaller worstRemaining wins
-const c = { word: 'char', entropy: 2.5, depthEstimate: 2, worstRemaining: 2, freqScore: 5, posScore: 3 };
-const d = { word: 'delta', entropy: 2.5, depthEstimate: 2, worstRemaining: 4, freqScore: 7, posScore: 3 };
+// If equal depthEstimate, entropy decides
+const c = { word: 'char', entropy: 2.5, depthEstimate: 2, freqScore: 5, posScore: 3 };
+const d = { word: 'delta', entropy: 1.5, depthEstimate: 2, freqScore: 7, posScore: 3 };
 expectOrder(c, d, 1, -1);
 
 // When chances are high, entropy dominates
