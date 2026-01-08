@@ -160,12 +160,17 @@
     // Expected remaining candidates after making this guess is sum_{patterns} p(pattern) * count(pattern)
     // which simplifies to sum(count^2)/total
     let sumSq = 0;
+    let maxCount = 0;
     for (const count of Object.values(patternCounts)) {
       sumSq += count * count;
+      if (count > maxCount) maxCount = count;
     }
     const expectedRemaining = sumSq / total;
+    // depthEstimate: approximate worst-case additional guesses needed, using log2(maxCount)
+    const worstRemaining = maxCount;
+    const depthEstimate = worstRemaining <= 1 ? 0 : Math.ceil(Math.log2(worstRemaining));
 
-    return { entropy, expectedRemaining };
+    return { entropy, expectedRemaining, worstRemaining, depthEstimate };
   };
 
 
@@ -239,13 +244,13 @@
           const isKnown = gameState && gameState.constraints && Object.prototype.hasOwnProperty.call(gameState.constraints.correct, i);
           if (!isKnown) posScore += (posFreqArrLocal[i][w[i]] || 0);
         }
-        const { entropy, expectedRemaining } = calculateExpectedInfo(w, possibleWords);
-        const winProbability = possibleWords.includes(w) ? (1 / possibleWords.length) : 0;
+        const { entropy, expectedRemaining, worstRemaining, depthEstimate } = calculateExpectedInfo(w, possibleWords);
         return {
           word: w,
           entropy,
           expectedRemaining,
-          winProbability,
+          worstRemaining,
+          depthEstimate,
           freqScore: scoreByLetterFreqLocal(w),
           posScore
         };
@@ -257,10 +262,10 @@
       if (optimizeForStreak && typeof gameState.attemptNumber === 'number') {
         const chancesLeft = Math.max(0, 6 - gameState.attemptNumber + 1);
         scoredPossible.sort((a, b) => {
-          // last attempts: prefer high winProbability, then smaller expectedRemaining, then entropy
+          // last attempts: prefer smaller depth estimate, then smaller worstRemaining, then entropy
           if (chancesLeft <= 2) {
-            if (a.winProbability !== b.winProbability) return b.winProbability - a.winProbability;
-            if (Math.abs(a.expectedRemaining - b.expectedRemaining) > 1e-9) return a.expectedRemaining - b.expectedRemaining;
+            if (a.depthEstimate !== b.depthEstimate) return a.depthEstimate - b.depthEstimate;
+            if (a.worstRemaining !== b.worstRemaining) return a.worstRemaining - b.worstRemaining;
             const d = b.entropy - a.entropy; if (Math.abs(d) > 1e-9) return d;
             const f = b.freqScore - a.freqScore; if (f !== 0) return f;
             const p = b.posScore - a.posScore; if (p !== 0) return p;
@@ -292,7 +297,8 @@
         chancesLeft: typeof gameState.attemptNumber === 'number' ? Math.max(0, 6 - gameState.attemptNumber + 1) : undefined,
         depthLeft: typeof gameState.attemptNumber === 'number' ? Math.max(0, 6 - gameState.attemptNumber) : undefined,
         expectedRemaining: item.expectedRemaining,
-        winProbability: item.winProbability
+        worstRemaining: item.worstRemaining,
+        depthEstimate: item.depthEstimate
       })), total: possibleWords.length };
     }
 
@@ -443,14 +449,14 @@
         }
       }
 
-      const { entropy, expectedRemaining } = calculateExpectedInfo(word, possibleWords);
-      const winProbability = possibleWords.includes(word) ? (1 / possibleWords.length) : 0;
+      const { entropy, expectedRemaining, worstRemaining, depthEstimate } = calculateExpectedInfo(word, possibleWords);
 
       return {
         word,
         entropy,
         expectedRemaining,
-        winProbability,
+        worstRemaining,
+        depthEstimate,
         freqScore: (wordFreqMap && typeof wordFreqMap[word] === 'number') ? wordFreqMap[word] : scoreByLetterFreq(word),
         posScore
       };
@@ -463,8 +469,8 @@
       const chancesLeft = Math.max(0, 6 - gameState.attemptNumber + 1);
       scored.sort((a, b) => {
         if (chancesLeft <= 2) {
-          if (a.winProbability !== b.winProbability) return b.winProbability - a.winProbability;
-          if (Math.abs(a.expectedRemaining - b.expectedRemaining) > 1e-9) return a.expectedRemaining - b.expectedRemaining;
+          if (a.depthEstimate !== b.depthEstimate) return a.depthEstimate - b.depthEstimate;
+          if (a.worstRemaining !== b.worstRemaining) return a.worstRemaining - b.worstRemaining;
           const d = b.entropy - a.entropy; if (Math.abs(d) > 1e-9) return d;
           const f = b.freqScore - a.freqScore; if (f !== 0) return f;
           const p = b.posScore - a.posScore; if (p !== 0) return p;
@@ -498,7 +504,8 @@
       chancesLeft: typeof gameState.attemptNumber === 'number' ? Math.max(0, 6 - gameState.attemptNumber + 1) : undefined,
       depthLeft: typeof gameState.attemptNumber === 'number' ? Math.max(0, 6 - gameState.attemptNumber) : undefined,
       expectedRemaining: item.expectedRemaining,
-      winProbability: item.winProbability
+      worstRemaining: item.worstRemaining,
+      depthEstimate: item.depthEstimate
     })), total: possibleWords.length };
   };
 

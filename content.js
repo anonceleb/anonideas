@@ -75,18 +75,20 @@
       inp.type = 'text'; inp.maxLength = 1; inp.className = 'ws-tile-input'; inp.value = t.letter ? t.letter.toUpperCase() : '';
       inp.autocomplete = 'off'; inp.spellcheck = false;
       inp.addEventListener('input', (ev) => {
+        ev.stopPropagation();
         const v = (ev.target.value || '').toLowerCase().slice(0,1).replace(/[^a-z]/g,'');
         tiles[i].letter = v;
         ev.target.value = v ? v.toUpperCase() : '';
       });
       inp.addEventListener('keydown', (ev) => {
+        ev.stopPropagation();
         if (ev.code === 'Space') { ev.preventDefault(); cycleColor(i); updateTileColor(wrapper, i); }
         if (ev.key === 'Backspace') { tiles[i].letter = ''; setTimeout(() => { ev.target.value = ''; }, 0); }
       });
 
       const colorBtn = document.createElement('button');
       colorBtn.type = 'button'; colorBtn.className = 'ws-tile-colorbtn'; colorBtn.title = 'Cycle color';
-      colorBtn.addEventListener('click', () => { cycleColor(i); updateTileColor(wrapper, i); });
+      colorBtn.addEventListener('click', (ev) => { ev.stopPropagation(); ev.preventDefault(); cycleColor(i); updateTileColor(wrapper, i); });
 
       wrapper.appendChild(inp);
       wrapper.appendChild(colorBtn);
@@ -99,7 +101,7 @@
     const c = tiles[idx].color;
     el.setAttribute('data-color', c);
     const btn = el.querySelector('.ws-tile-colorbtn');
-    btn.textContent = c === 'unknown' ? '' : c[0].toUpperCase();
+    btn.textContent = '';
     const input = el.querySelector('.ws-tile-input');
     // visual styles are handled via CSS attribute selectors
   }
@@ -316,7 +318,8 @@
           <div class="ws-word">${s.word}</div>
           <div class="ws-meta">Entropy: ${Number(s.entropy).toFixed(2)} bits` +
             (s.expectedRemaining !== undefined ? ` • Expected remaining: ${Number(s.expectedRemaining).toFixed(2)}` : '') +
-            (s.winProbability !== undefined ? ` • Win prob: ${Number(s.winProbability).toFixed(3)}` : '') +
+            (s.worstRemaining !== undefined ? ` • Worst remaining: ${s.worstRemaining}` : '') +
+            (s.depthEstimate !== undefined ? ` • Depth est: ${s.depthEstimate}` : '') +
             (s.chancesLeft !== undefined ? ` • Chances left: ${s.chancesLeft}` : '') +
           `</div>
         </div>
