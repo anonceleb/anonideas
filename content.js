@@ -45,7 +45,7 @@
   const closeBtn = root.querySelector('#wordle-solver-close');
   const runBtn = root.querySelector('#ws-run');
   const refreshBtn = root.querySelector('#ws-refresh');
-  const clearBtn = document.createElement('button'); clearBtn.id = 'ws-clear'; clearBtn.textContent = 'Clear row';
+  const clearBtn = root.querySelector('#ws-clear');
   const wordlistCountEl = root.querySelector('#ws-wordlist-count');
   const attemptInput = root.querySelector('#ws-attempt');
   const tileRow = root.querySelector('#wordle-solver-tilerow');
@@ -94,6 +94,15 @@
     try { chrome.storage.local.set({ ws_entropy_cache: {} }); } catch (e) {}
     try { window.postMessage({ source: 'wordle-solver-extension', type: 'entropy-cache-clear' }, '*'); } catch (e) {}
     if (persistCheckbox) { persistCheckbox.checked = false; persistEnabled = false; chrome.storage.local.set({ ws_persistent_cache_enabled: false }); }
+  });
+
+  // Clear the manual tile row
+  if (clearBtn) clearBtn.addEventListener('click', () => {
+    try {
+      tiles.forEach(t => { t.letter = ''; t.color = 'unknown'; });
+      renderTiles();
+      results.innerHTML = '';
+    } catch (e) { console.warn('Wordle Solver: Error clearing tiles', e); }
   });
 
   // Auto-refresh guard (refresh at most once per page session automatically)
