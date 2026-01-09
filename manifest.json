@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Wordle Optimal Solver",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Suggests optimal Wordle guesses using information theory",
   "permissions": ["activeTab", "storage"],
   "optional_host_permissions": [
