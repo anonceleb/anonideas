@@ -30,7 +30,7 @@ java EntropyTest
 
 ### Documentation
 
-See [ENTROPY_VALIDATION.md](ENTROPY_VALIDATION.md) for detailed documentation including:
+See [tools/entropy/ENTROPY_VALIDATION.md](tools/entropy/ENTROPY_VALIDATION.md) for detailed documentation including:
 - How to use the system
 - Established metrics and research references
 - Validation methods explained
