@@ -31,22 +31,39 @@
       <div id="wordle-solver-results"></div>
     </div>
   `;
-  Object.assign(root.style, { position: 'fixed', right: '12px', bottom: '12px', zIndex: 2147483647 });
+  Object.assign(root.style, { position: 'fixed', right: '12px', bottom: '12px', zIndex: 2147483647, fontFamily: 'Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial', fontSize: '13px' });
   document.body.appendChild(root);
 
   // Styles (inlined minimal to ensure visible even if styles.css didn't load yet)
   const style = document.createElement('style');
   style.textContent = `
-    #wordle-solver-toggle { background:#111827;color:#fff;border-radius:6px;padding:8px 12px;border:none;font-weight:bold;cursor:pointer }
-    #wordle-solver-panel { display:none; width:320px; background: #fff; color:#111; border-radius:8px; box-shadow: 0 6px 20px rgba(0,0,0,.3); padding:12px; margin-top:8px }
+    :root { --ws-bg: #fff; --ws-ink: #0b1220; --ws-muted: #6b7280; --ws-accent: #111827; }
+
+    #wordle-solver-toggle { background:var(--ws-accent); color:#fff; border-radius:8px; padding:8px 12px; border:none; font-weight:600; cursor:pointer; box-shadow:0 2px 8px rgba(2,6,23,0.15); }
+
+    #wordle-solver-panel { display:none; width:360px; max-width:90vw; background: var(--ws-bg); color:var(--ws-ink); border-radius:12px; box-shadow: 0 10px 30px rgba(2,6,23,0.18); padding:14px; margin-top:8px; font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; font-size:13px; }
     #wordle-solver-panel[aria-hidden="false"] { display:block }
-    #wordle-solver-header { display:flex; justify-content:space-between; align-items:center }
-    #wordle-solver-controls { margin-top:8px; display:flex; gap:8px; align-items:center }
-    #wordle-solver-controls input[type="number"] { width:60px }
+
+    #wordle-solver-header { display:flex; justify-content:space-between; align-items:center; gap:12px; padding-bottom:8px; border-bottom:1px solid #eef2f7 }
+    #wordle-solver-header strong { font-size:16px; font-weight:700; letter-spacing:0.2px }
+    #wordle-solver-close { background:transparent; border:1px solid #eef2f7; width:28px; height:28px; border-radius:6px; cursor:pointer }
+
+    #wordle-solver-controls { margin-top:10px; display:flex; gap:8px; align-items:center; flex-wrap:wrap }
+    #wordle-solver-controls label { display:flex; align-items:center; gap:6px }
+    #wordle-solver-controls input[type="number"] { width:56px; padding:6px; border-radius:6px; border:1px solid #eef2f7 }
+
+    button { padding:8px 10px; border-radius:8px; border:1px solid transparent; background:#f3f4f6; cursor:pointer }
+    button#ws-run { background:var(--ws-accent); color:#fff; border:none; padding:10px 12px; border-radius:8px }
+    #ws-clear-cache { background:#fff; border:1px solid #eef2f7; padding:6px 8px; border-radius:8px }
+
     #wordle-solver-results { margin-top:12px; max-height:320px; overflow:auto; font-size:13px }
-    .ws-item { padding:6px 8px; border-bottom:1px solid #eee }
-    .ws-word { font-weight:700 }
-    .ws-meta { color:#666; font-size:12px }
+    .ws-item { padding:8px 10px; border-bottom:1px solid #f3f4f4 }
+    .ws-word { font-weight:700; margin-bottom:4px }
+    .ws-meta { color:var(--ws-muted); font-size:12px }
+
+    /* small tweaks */
+    #wordle-solver-controls .ws-help-inline { font-size:12px; color:var(--ws-muted) }
+    #ws-persist-cache { transform:scale(1.05) }
   `;
   document.head.appendChild(style);
 
