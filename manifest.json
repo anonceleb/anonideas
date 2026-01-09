@@ -3,7 +3,7 @@
   "name": "Wordle Optimal Solver",
   "version": "1.0.0",
   "description": "Suggests optimal Wordle guesses using information theory",
-  "permissions": ["activeTab"],
+  "permissions": ["activeTab", "storage"],
   "optional_host_permissions": [
     "https://www.nytimes.com/*",
     "https://www.nytimes.com/games/wordle/*",
@@ -12,6 +12,9 @@
     "https://*.absurdle.com/*",
     "https://*.wordle.wtf/*",
     "https://*.wordleplay.com/*"
+  ],
+  "host_permissions": [
+    "https://gist.githubusercontent.com/*"
   ],
   "content_scripts": [
     {
@@ -44,7 +47,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["solver.js", "strategist.js", "data/wordlist.txt"],
+      "resources": ["solver.js", "strategist.js", "data/wordlist.txt", "data/word_freq.json", "data/pos_freq.json", "data/bitmasks.json"],
       "matches": ["<all_urls>"]
     }
   ]

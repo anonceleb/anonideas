@@ -21,8 +21,12 @@ const d = { word: 'delta', entropy: 1.5, depthEstimate: 2, freqScore: 7, posScor
 expectOrder(c, d, 1, -1);
 
 // When chances are high, entropy dominates
-const e = { word: 'echo', entropy: 4.0, expectedRemaining: 10, freqScore: 1, posScore: 1 };
-const f = { word: 'foxtrot', entropy: 2.0, expectedRemaining: 2, freqScore: 20, posScore: 10 };
+const e = { word: 'echo', entropy: 4.0, depthEstimate: 4, freqScore: 1, posScore: 1 };
+const f = { word: 'foxtrot', entropy: 2.0, depthEstimate: 1, freqScore: 20, posScore: 10 };
 expectOrder(e, f, 5, -1);
 
+// When chances are moderate (<=4), prefer smaller depthEstimate
+const g = { word: 'golf', entropy: 4.0, depthEstimate: 4, freqScore: 1, posScore: 1 };
+const h = { word: 'hotel', entropy: 2.0, depthEstimate: 1, freqScore: 20, posScore: 10 };
+expectOrder(g, h, 4, 1); // h should be preferred because smaller depthEstimate
 console.log('If no errors above, attempt strategy tests completed.');
