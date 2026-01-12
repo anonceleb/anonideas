@@ -25,8 +25,24 @@
       <label style="margin-left:8px"><input id="ws-persist-cache" type="checkbox" /> Persistent cache</label>
       <button id="ws-clear-cache" title="Clear persistent cache" style="margin-left:6px;padding:4px 6px">Clear cache</button>
       <button id="ws-clear" style="background:#ef4444;color:#fff;border-radius:6px;padding:6px 8px;border:none;margin-left:6px">Clear row</button>
+      <!-- Exclude letters input: free-form list of letters (e.g., "abcdf") -->
+      <label style="margin-left:8px">Exclude letters: <input id="ws-exclude" type="text" maxlength="26" placeholder="e.g., abcdf" style="width:110px;" /></label>
       </div>
-      <div style="margin-top:8px;font-size:12px;color:#444">Word list: <span id="ws-wordlist-count">unknown</span> words</div>
+      <div id="ws-exclude-warning" style="margin-top:6px;color:#a44;font-size:12px;display:none">Warning: excluded letters conflict with present/correct tiles.</div>
+
+      <!-- Auto-detect validated rows (opt-in) -->
+      <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <label style="font-size:12px;margin-right:6px"><input id="ws-auto-detect" type="checkbox" /> Auto-detect validated rows</label>
+        <button id="ws-detect-now" style="padding:4px 8px;border-radius:6px;border:1px solid #ddd;background:#fff;">Detect now</button>
+        <label style="font-size:12px;margin-left:8px"><input id="ws-auto-suggest" type="checkbox" /> Auto-suggest on detect</label>
+      </div>
+      <div id="ws-detect-summary" style="margin-top:6px;font-size:12px;color:#333;display:none">
+        <div id="ws-detect-summary-text" style="margin-bottom:6px"></div>
+        <button id="ws-use-detection" style="padding:4px 8px;border-radius:6px;border:1px solid #ddd;background:#1f8feb;color:#fff">Use & Suggest</button>
+      </div>
+
+      
+      <div id="ws-wordlist" style="margin-top:8px;font-size:12px;color:#444">Word list: <span id="ws-wordlist-count">unknown</span> words</div>
       <div id="wordle-solver-tilerow" aria-label="Manual input row" role="group"></div>
       <div id="wordle-solver-results"></div>
     </div>
@@ -52,6 +68,15 @@
   const results = root.querySelector('#wordle-solver-results');
   const persistCheckbox = root.querySelector('#ws-persist-cache');
   const clearCacheBtn = root.querySelector('#ws-clear-cache');
+  const wsExclude = root.querySelector('#ws-exclude');
+  const wsExcludeWarning = root.querySelector('#ws-exclude-warning');
+  const wsAutoDetect = root.querySelector('#ws-auto-detect');
+  const wsDetectNow = root.querySelector('#ws-detect-now');
+  const wsAutoSuggest = root.querySelector('#ws-auto-suggest');
+  const wsDetectSummary = root.querySelector('#ws-detect-summary');
+  const wsDetectSummaryText = root.querySelector('#ws-detect-summary-text');
+  const wsUseDetection = root.querySelector('#ws-use-detection');
+  const wsWordlist = root.querySelector('#ws-wordlist');
 
   // persistent cache state (in-memory mirror of chrome.storage entry)
   let persistEnabled = false;
@@ -71,6 +96,19 @@
       } catch (e) { console.warn('Wordle Solver: Error initializing persistent cache toggle', e); }
     });
   } catch (e) { console.warn('Wordle Solver: storage not available', e); }
+
+  // Initialize auto-detect preferences
+  try {
+    chrome.storage.local.get(['ws_auto_detect_enabled','ws_auto_suggest_enabled'], (items) => {
+      try {
+        const autoDetectEnabled = !!items.ws_auto_detect_enabled;
+        const autoSuggestEnabled = !!items.ws_auto_suggest_enabled;
+        if (wsAutoDetect) wsAutoDetect.checked = autoDetectEnabled;
+        if (wsAutoSuggest) wsAutoSuggest.checked = autoSuggestEnabled;
+        if (autoDetectEnabled) startAutoDetectObserver();
+      } catch (e) { console.warn('Wordle Solver: Error initializing auto-detect prefs', e); }
+    });
+  } catch (e) { console.warn('Wordle Solver: storage not available for auto-detect prefs', e); }
 
   if (persistCheckbox) persistCheckbox.addEventListener('change', (ev) => {
     persistEnabled = !!ev.target.checked;
@@ -102,6 +140,11 @@
       tiles.forEach(t => { t.letter = ''; t.color = 'unknown'; });
       renderTiles();
       results.innerHTML = '';
+      if (wsExclude) { wsExclude.value = ''; }
+      if (wsExcludeWarning) { wsExcludeWarning.style.display = 'none'; }
+      if (wsDetectSummary) { wsDetectSummary.style.display = 'none'; wsDetectSummaryText.textContent = ''; }
+      // also clear detection state
+      try { _lastDetectedRows = []; _lastDetectedRowsWords = new Set(); _lastDetectionSignature = ''; } catch (e) {}
     } catch (e) { console.warn('Wordle Solver: Error clearing tiles', e); }
   });
 
@@ -567,7 +610,233 @@
     if (r.ok) return r;
     throw new Error(r.error || 'Refresh failed');
   }
+  // Convenience helper: programmatically set exclude input from console (e.g., setExclude('abc'))
+  window.setExclude = function(str) { if (wsExclude) { wsExclude.value = String(str || ''); wsExcludeWarning && (wsExcludeWarning.style.display = 'none'); } }
 
+  // Convenience helpers to control auto-detect and auto-suggest from console
+  window.setAutoDetect = function(enabled) { if (wsAutoDetect) { wsAutoDetect.checked = !!enabled; try { chrome.storage.local.set({ ws_auto_detect_enabled: !!enabled }); } catch (e) {} if (enabled) startAutoDetectObserver(); else stopAutoDetectObserver(); } }
+  window.setAutoSuggest = function(enabled) { if (wsAutoSuggest) { wsAutoSuggest.checked = !!enabled; try { chrome.storage.local.set({ ws_auto_suggest_enabled: !!enabled }); } catch (e) {} } }
+  window.runDetectNow = function() { try { const det = detectValidatedRowsFromPage(); showDetectionSummary(det); return det; } catch (e) { console.warn('runDetectNow failed', e); return null; } }
+
+  // DOM detection helper: returns { success: Boolean, rows: Array, constraints: { correct, present, absent } }
+  function detectValidatedRowsFromPage() {
+    function normalizeState(raw) {
+      if (!raw) return null;
+      raw = String(raw).toLowerCase();
+      if (raw.includes('correct') || raw.includes('green')) return 'correct';
+      if (raw.includes('present') || raw.includes('yellow')) return 'present';
+      if (raw.includes('absent') || raw.includes('gray') || raw.includes('grey') || raw.includes('black')) return 'absent';
+      const m = raw.match(/(\d+),\s*(\d+),\s*(\d+)/);
+      if (m) {
+        const r = +m[1], g = +m[2], b = +m[3];
+        if (g > r && g > b && g > 100) return 'correct';
+        if (r > g && r > 100) return 'present';
+        return 'absent';
+      }
+      return null;
+    }
+
+    // Try common selectors
+    let tileEls = Array.from(document.querySelectorAll('[data-state]')).filter(el => /^[A-Za-z]$/.test((el.textContent || '').trim()));
+    if (tileEls.length === 0) {
+      for (const gr of Array.from(document.querySelectorAll('game-row'))) {
+        try {
+          const sr = gr.shadowRoot;
+          if (!sr) continue;
+          const tiles = Array.from(sr.querySelectorAll('.tile, [data-state], .letter')).filter(el => /^[A-Za-z]$/.test((el.textContent || '').trim()));
+          tileEls = tileEls.concat(tiles);
+        } catch (e) { /* ignore closed shadow roots */ }
+      }
+    }
+    if (tileEls.length === 0) {
+      tileEls = Array.from(document.querySelectorAll('div,span,button')).filter(el => /^[A-Za-z]$/.test((el.textContent || '').trim()));
+    }
+
+    if (!tileEls.length) return { success: false, rows: [] };
+
+    const items = tileEls.map(el => {
+      const rect = el.getBoundingClientRect();
+      const rawState = el.getAttribute('data-state') || el.getAttribute('aria-label') || window.getComputedStyle(el).backgroundColor || '';
+      return { el, letter: (el.textContent || '').trim().toLowerCase(), rawState, rect };
+    });
+
+    const rowsMap = new Map();
+    for (const it of items) {
+      const bucket = Math.round(it.rect.top / 5) * 5;
+      if (!rowsMap.has(bucket)) rowsMap.set(bucket, []);
+      rowsMap.get(bucket).push(it);
+    }
+
+    const rows = [];
+    const sortedBuckets = Array.from(rowsMap.keys()).sort((a,b) => a-b);
+    for (const b of sortedBuckets) {
+      const rowItems = rowsMap.get(b).slice().sort((a,b) => a.rect.left - b.rect.left);
+      if (rowItems.length < 5) continue;
+      const rowTiles = rowItems.slice(0,5).map((t, idx) => ({ letter: t.letter || '', rawState: t.rawState || '', state: normalizeState(t.rawState), idx }));
+      if (rowTiles.every(t => t.letter && t.state)) rows.push(rowTiles);
+    }
+
+    if (!rows.length) return { success: false, rows };
+
+    const correct = {}, present = {}, absentSet = new Set();
+    rows.forEach(row => {
+      row.forEach(tile => {
+        if (!tile.letter) return;
+        if (tile.state === 'correct') correct[tile.idx] = tile.letter;
+        else if (tile.state === 'present') {
+          if (!present[tile.letter]) present[tile.letter] = new Set();
+          present[tile.letter].add(tile.idx);
+        } else if (tile.state === 'absent') {
+          absentSet.add(tile.letter);
+        }
+      });
+    });
+    for (const l of Object.values(correct)) absentSet.delete(l);
+    for (const l of Object.keys(present)) absentSet.delete(l);
+    const presentObj = {};
+    for (const k of Object.keys(present)) presentObj[k] = Array.from(present[k]);
+    const constraints = { correct, present: presentObj, absent: Array.from(absentSet) };
+    return { success: true, rows, constraints };
+  }
+
+  // UI helper to show detection summary and hook up 'Use & Suggest'
+  function showDetectionSummary(result) {
+    if (!wsDetectSummary || !wsDetectSummaryText) return;
+    if (!result || !result.success) { wsDetectSummary.style.display = 'none'; wsDetectSummaryText.textContent = ''; return; }
+    const c = result.constraints || { correct: {}, present: {}, absent: [] };
+
+    // Friendly mini-tile renderer
+    const colorMap = { correct: '#6aaa64', present: '#c9b458', absent: '#787c7e' };
+    const rowsHtml = (result.rows || []).map(row => {
+      const tiles = row.map(t => {
+        const bg = colorMap[t.state] || '#f3f4f6';
+        return `<span style="display:inline-block;width:20px;height:24px;line-height:24px;text-align:center;margin-right:4px;border-radius:4px;background:${bg};color:${t.state==='absent'?"#fff":"#000"};font-weight:700">${(t.letter||'').toUpperCase()}</span>`;
+      }).join('');
+      return `<div style="margin-bottom:6px">${tiles}</div>`;
+    }).join('');
+
+    // short summary text
+    const presentList = Object.entries(c.present).map(([l,ps]) => `${l}: [${ps.join(',')}]`).join(', ');
+    const excluded = (c.absent || []).join('');
+
+    // Detect completed game (win if any fully correct row, loss if 6+ rows and no correct tiles)
+    const gameCompleted = (function() {
+      try {
+        const rows = result.rows || [];
+        if (!rows.length) return false;
+        if (rows.some(r => r.every(t => t.state === 'correct'))) return true;
+        if (rows.length >= 6 && !rows.some(r => r.some(t => t.state === 'correct'))) return true;
+        return false;
+      } catch (e) { return false; }
+    })();
+
+    // If completed, only show the tiles (no summary line) and hide the 'Use & Suggest' button
+    if (gameCompleted) {
+      wsDetectSummaryText.innerHTML = rowsHtml;
+      if (wsUseDetection) try { wsUseDetection.style.display = 'none'; } catch (e) {}
+      // Hide the word list summary when the game looks completed
+      try { if (wsWordlist) wsWordlist.style.display = 'none'; } catch (e) {}
+    } else {
+      wsDetectSummaryText.innerHTML = `${rowsHtml}<div style="font-size:12px;color:#444">Detected — Present: ${presentList || '—'} &nbsp; Excluded: <strong>${excluded || '—'}</strong></div>`;
+      if (wsUseDetection) try { wsUseDetection.style.display = ''; } catch (e) {}
+      // Ensure the word list summary is visible when not completed
+      try { if (wsWordlist) wsWordlist.style.display = ''; } catch (e) {}
+    }
+    wsDetectSummary.style.display = 'block';
+
+    // wire Use & Suggest button to populate tiles and request suggestions
+    if (wsUseDetection) {
+      wsUseDetection.onclick = async () => {
+        try {
+          await applyDetection(result, { suggest: true });
+        } catch (e) {
+          results.innerHTML = `<div style="color:#900">Error: ${e.message}</div>`;
+        }
+      };
+    }
+  }
+
+  // MutationObserver for auto-detect
+  let _autoDetectObserver = null;
+  let _lastDetectionSignature = '';
+  // Last detected rows (array of rows) and quick set of played words to filter suggestions
+  let _lastDetectedRows = [];
+  let _lastDetectedRowsWords = new Set();
+
+  function makeSignature(r) { try { return JSON.stringify(r.constraints || {}); } catch (e) { return ''; } }
+
+  // Apply detection into UI (populate tiles) and optionally request suggestions
+  async function applyDetection(det, opts = { suggest: false }) {
+    try {
+      if (!det || !det.success) return;
+      const rows = det.rows || [];
+      if (!rows.length) return;
+      // Use the last validated row (most recent)
+      const lastRow = rows[rows.length - 1];
+      _lastDetectedRows = rows;
+      _lastDetectedRowsWords = new Set(rows.map(r => r.map(t => t.letter).join('')));
+
+      // Populate the manual tiles in the extension for visual confirmation
+      tiles.forEach((t, i) => { t.letter = ''; t.color = 'unknown'; });
+      lastRow.forEach((tile, i) => {
+        tiles[i].letter = tile.letter || '';
+        tiles[i].color = tile.state === 'correct' ? 'correct' : (tile.state === 'present' ? 'present' : (tile.state === 'absent' ? 'absent' : 'unknown'));
+      });
+      renderTiles();
+
+      // Update the summary display so it stays in sync
+      showDetectionSummary(det);
+
+      if (opts.suggest) {
+        try {
+          const payload = { guesses: Array.from(_lastDetectedRowsWords), constraints: det.constraints };
+          const res = await requestSuggestions(payload);
+          displayResults(res);
+        } catch (e) {
+          results.innerHTML = `<div style="color:#900">Error: ${e.message}</div>`;
+        }
+      }
+    } catch (e) { console.warn('applyDetection failed', e); }
+  }
+
+  function startAutoDetectObserver() {
+    if (_autoDetectObserver) return;
+    const rootEl = document.querySelector('game-app') || document.querySelector('main') || document.body;
+    const debounced = debounce(async () => {
+      try {
+        const det = detectValidatedRowsFromPage();
+        if (det && det.success) {
+          const sig = makeSignature(det);
+          if (sig !== _lastDetectionSignature) {
+            _lastDetectionSignature = sig;
+            showDetectionSummary(det);
+            if (wsAutoSuggest && wsAutoSuggest.checked) {
+              try { applyDetection(det, { suggest: true }); } catch (e) {}
+            }
+          }
+        }
+      } catch (e) { console.warn('Auto-detect debounce error', e); }
+    }, 250);
+
+    _autoDetectObserver = new MutationObserver((mutations) => { debounced(); });
+    try { _autoDetectObserver.observe(rootEl, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-state','aria-label','class','style'] }); } catch (e) { try { _autoDetectObserver.observe(document.body, { subtree: true, childList: true, attributes: true }); } catch (e2) { console.warn('Auto-detect observer failed to attach', e2); _autoDetectObserver = null; } }
+  }
+  function stopAutoDetectObserver() { try { if (_autoDetectObserver) { _autoDetectObserver.disconnect(); _autoDetectObserver = null; } } catch (e) {} }
+
+  // Debounce helper
+  function debounce(fn, wait) { let t = null; return () => { if (t) clearTimeout(t); t = setTimeout(() => { t = null; fn(); }, wait); }; }
+
+  // Wire up UI events for auto-detect controls
+  if (wsDetectNow) wsDetectNow.addEventListener('click', () => { try { const det = detectValidatedRowsFromPage(); showDetectionSummary(det); } catch (e) { console.warn('Detect now failed', e); } });
+  if (wsAutoDetect) wsAutoDetect.addEventListener('change', (ev) => {
+    const enabled = !!ev.target.checked;
+    try { chrome.storage.local.set({ ws_auto_detect_enabled: enabled }); } catch (e) {}
+    if (enabled) startAutoDetectObserver(); else stopAutoDetectObserver();
+  });
+  if (wsAutoSuggest) wsAutoSuggest.addEventListener('change', (ev) => {
+    const enabled = !!ev.target.checked;
+    try { chrome.storage.local.set({ ws_auto_suggest_enabled: enabled }); } catch (e) {}
+  });
 
 
   runBtn.addEventListener('click', async () => {
@@ -589,6 +858,27 @@
         if (!usedElsewhere) constraints.absent.push(l);
       }
     });
+
+    // Parse free-form Exclude letters input (if present) and merge into absent list
+    if (wsExclude && wsExclude.value) {
+      const raw = (wsExclude.value || '').toLowerCase();
+      const letters = Array.from(new Set(raw.split('').filter(ch => /[a-z]/.test(ch))));
+      for (const ch of letters) {
+        // do not duplicate
+        if (!constraints.absent.includes(ch)) constraints.absent.push(ch);
+      }
+      // Validate: if excluded letters conflict with present/correct letters, show warning
+      let conflict = false;
+      for (const ch of constraints.absent) {
+        if (Object.values(constraints.correct).includes(ch)) { conflict = true; break; }
+        if (constraints.present && constraints.present[ch]) { conflict = true; break; }
+      }
+      if (wsExcludeWarning) {
+        wsExcludeWarning.style.display = conflict ? 'block' : 'none';
+      }
+    } else {
+      if (wsExcludeWarning) { wsExcludeWarning.style.display = 'none'; }
+    }
 
     // Debug: show constructed constraints in console so you can verify
     console.log('Wordle Solver: Posting constraints:', constraints);
@@ -638,10 +928,48 @@
   });
   function displayResults(obj) {
     if (!obj) { results.innerHTML = '<div>No suggestions</div>'; return; }
-    const list = obj.suggestions || obj;
+    const list = Array.isArray(obj.suggestions) ? obj.suggestions.slice() : (Array.isArray(obj) ? obj.slice() : []);
     const total = obj.total || list.length;
-    results.innerHTML = `<div style="font-size:12px;color:#333;margin-bottom:8px">Possible matches: ${total}</div>` +
-      list.map(s => `
+
+    // Filter out words that were already detected as played (e.g., last guess)
+    const filtered = list.filter(s => !_lastDetectedRowsWords.has(s.word));
+    const filteredCount = filtered.length;
+    const filteredOut = list.length - filteredCount;
+
+    if (filteredCount === 0) {
+      // If all suggestions were filtered because they were already-played, surface which words were hidden
+      const filteredOutWords = list.filter(s => _lastDetectedRowsWords.has(s.word)).map(s => s.word);
+
+      // Detect if the game appears to be completed already (win: any fully-correct row, or loss: 6 rows with no correct)
+      const gameCompleted = (function() {
+        try {
+          const rows = _lastDetectedRows || [];
+          if (!rows.length) return false;
+          // Win if any row is fully correct
+          if (rows.some(r => r.every(t => t.state === 'correct'))) return true;
+          // Loss if 6 (or more) validated rows and no correct tiles
+          if (rows.length >= 6 && !rows.some(r => r.some(t => t.state === 'correct'))) return true;
+          return false;
+        } catch (e) { return false; }
+      })();
+
+      if (filteredOutWords.length > 0) {
+        if (gameCompleted) {
+          results.innerHTML = `<div style="font-size:12px;color:#333;margin-bottom:8px"><strong>Wordle completed for the day.</strong></div>`;
+        } else {
+          results.innerHTML = `<div style="font-size:12px;color:#333;margin-bottom:8px">No suggestions after filtering out already-played words (${filteredOut} filtered).</div>` +
+            `<div style="font-size:12px;color:#333;margin-bottom:8px">Previously played matches: <strong>${filteredOutWords.join(', ').toUpperCase()}</strong></div>` +
+            `<div class="ws-help">Try clearing the row or adjust excludes.</div>`;
+        }
+      } else {
+        results.innerHTML = `<div style="font-size:12px;color:#333;margin-bottom:8px">No suggestions after filtering out already-played words (${filteredOut} filtered).</div>` +
+          `<div class="ws-help">Try clearing the row or adjust excludes.</div>`;
+      }
+      return;
+    }
+
+    results.innerHTML = `<div style="font-size:12px;color:#333;margin-bottom:8px">Possible matches: ${filteredCount}` + (filteredOut ? ` <span style="color:#666;font-size:11px;">(${filteredOut} hidden as previously played)</span>` : '') + `</div>` +
+      filtered.map(s => `
         <div class="ws-item">
           <div class="ws-word">${s.word}</div>
           <div class="ws-meta">Entropy: ${Number(s.entropy).toFixed(2)} bits` +
@@ -652,5 +980,21 @@
       `).join('') +
       `<div class="ws-help">Depth est = a cheap upper-bound of extra guesses needed (lower is better).</div>`;
   }
+
+  // Expose some internals for testing in Node environments (non-browser)
+  try {
+    if (typeof module !== 'undefined' && module.exports) {
+      module.exports = module.exports || {};
+      module.exports._test = {
+        // allow tests to set the detected words set
+        setLastDetectedRowsWords: (arrOrSet) => { _lastDetectedRowsWords = (arrOrSet instanceof Set) ? new Set(Array.from(arrOrSet)) : new Set(arrOrSet || []); },
+        // allow tests to set the detected rows (array of rows with tile state) so completion detection can be exercised
+        setLastDetectedRows: (rows) => { _lastDetectedRows = Array.isArray(rows) ? rows : []; },
+        // expose functions so tests can exercise UI detection summary and display logic
+        showDetectionSummary: showDetectionSummary,
+        displayResults: displayResults
+      };
+    }
+  } catch (e) { /* ignore in browser */ }
 
 })();
