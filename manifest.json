@@ -1,0 +1,54 @@
+{
+  "manifest_version": 3,
+  "name": "Wordle Optimal Solver",
+  "version": "1.0.1",
+  "description": "Suggests optimal Wordle guesses using information theory",
+  "permissions": ["activeTab", "storage"],
+  "optional_host_permissions": [
+    "https://www.nytimes.com/*",
+    "https://www.nytimes.com/games/wordle/*",
+    "https://wordle.com/*",
+    "https://www.wordle.com/*",
+    "https://*.absurdle.com/*",
+    "https://*.wordle.wtf/*",
+    "https://*.wordleplay.com/*"
+  ],
+  "host_permissions": [
+    "https://gist.githubusercontent.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.nytimes.com/games/wordle/*",
+        "https://www.nytimes.com/*/wordle*",
+        "https://wordle.com/*",
+        "https://www.wordle.com/*",
+        "https://*.absurdle.com/*",
+        "https://*.wordle.wtf/*",
+        "https://*.wordleplay.com/*"
+      ],
+      "js": ["content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "homepage_url": "https://github.com/anonceleb/anonideas",
+  "icons": {
+    "16": "icons/icon.svg",
+    "48": "icons/icon.svg",
+    "128": "icons/icon.svg"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Wordle Optimal Solver"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["solver.js", "strategist.js", "data/wordlist.txt", "data/word_freq.json", "data/pos_freq.json", "data/bitmasks.json"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
